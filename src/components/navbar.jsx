@@ -1,39 +1,39 @@
-import { Link } from "react-router-dom"
-function NavBar() {
+import { Link, useLocation } from "react-router-dom";
+import { HomeIcon, MapIcon, ClipboardIcon, BellIcon, UserIcon } from "../lib/icons";
 
+const TABS = [
+  { to: "/", label: "Home", Icon: HomeIcon, match: (p) => p === "/" },
+  { to: "/map", label: "Map", Icon: MapIcon, match: (p) => p === "/map" },
+  { to: "/reports", label: "Reports", Icon: ClipboardIcon, match: (p) => p === "/reports" },
+  { to: "/notifications", label: "Notifications", Icon: BellIcon, match: (p) => p === "/notifications" },
+  { to: "/profile", label: "Profile", Icon: UserIcon, match: (p) => p === "/profile" },
+];
+
+function NavBar() {
+  const { pathname } = useLocation();
 
   return (
-    <div className="flex flex-col w-full">
-        <nav className="flex flex-row p-2 justify-center items-center mt-5">
-            <ul className="flex flex-row gap-10">
-                <li>
-                    <Link to="/">
-                        <img src="src/assets/Home.png" alt="Home Icon" className="w-10" />
-                        <span>Home</span>
-                    </Link>
-                </li>
-                <li>
-                    <Link to="/map">
-                        <img src="src/assets/Map.png" alt="Map Icon" className="w-10" />
-                        <span>Map</span>
-                    </Link>     
-                </li>
-                <li>
-                    <Link to="/report">
-                        <img src="src/assets/Report.png" alt="Report Icon" className="w-10" />
-                        <span>Reports</span>
-                    </Link>    
-                </li>
-                <li>
-                    <Link to="/profile">
-                        <img src="src/assets/Profile.png" alt="Profile Icon" className="w-10" />
-                        <span>Profile</span>
-                    </Link>
-                </li>
-            </ul>
-        </nav>
-    </div>
-  )
+    <nav className="fixed bottom-0 left-1/2 z-[1000] w-full max-w-[430px] -translate-x-1/2 border-t border-line bg-white">
+      <ul className="flex items-stretch justify-around px-1 py-1.5">
+        {TABS.map(({ to, label, Icon, match }) => {
+          const active = match(pathname);
+          return (
+            <li key={to} className="flex-1">
+              <Link
+                to={to}
+                className={`flex flex-col items-center gap-0.5 rounded-lg py-1 transition-colors ${
+                  active ? "text-primary" : "text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                <Icon className="h-6 w-6" strokeWidth={active ? 2.4 : 1.8} />
+                <span className={`text-[11px] ${active ? "font-bold" : "font-medium"}`}>{label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
 }
 
-export default NavBar
+export default NavBar;

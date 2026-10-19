@@ -1,78 +1,103 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
+import LeafletMap from "../components/LeafletMap";
+import { SearchIcon, BellIcon, MapPinIcon, ChevronDown, PlusIcon } from "../lib/icons";
+import { SEED_REPORTS, CLUSTERS, STATUS } from "../lib/data";
+import { useFlow } from "../context/flow";
 
 function Home() {
-    const [query, setQuery] = useState("Emfuleni Local Municipality");
+  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
+  const { myReports } = useFlow();
 
+  const all = [...myReports, ...SEED_REPORTS];
+  const q = query.trim().toLowerCase();
+  const filtered = q ? all.filter((r) => r.area.toLowerCase().includes(q)) : all;
+
+  const markers = [
+    ...filtered.map((r) => ({ lat: r.lat, lng: r.lng, color: STATUS[r.status].color })),
+    ...(q ? [] : CLUSTERS.map((c) => ({ ...c, cluster: true, label: c.count }))),
+  ];
+
+  const nearby = 128 + myReports.length;
+  const total = 844 + myReports.length;
 
   return (
+    <div className="flex min-h-screen flex-col bg-white">
+      {/* Brand header */}
+      <header className="flex items-center justify-between px-4 pt-4">
+        <div className="flex items-center gap-2">
+          <img src="/logo-96.png" alt="" className="h-10 w-10 object-contain" />
+          <h1 className="text-2xl font-extrabold tracking-tight">PotholePal</h1>
+        </div>
+        <button
+          type="button"
+          aria-label="Notifications"
+          onClick={() => navigate("/notifications")}
+          className="relative flex h-10 w-10 items-center justify-center rounded-full text-ink hover:bg-slate-100"
+        >
+          <BellIcon className="h-6 w-6" />
+          <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
+        </button>
+      </header>
 
-    <div className="flex flex-col w-full">
-        <header className="flex items-center justify-between w-full p-2">
-            <div className="flex items-center">
-                <img src="src/assets/Logo.png" alt="PotholePal Logo" className="w-15 md:w-30 p-1" />
-                <h1 className="flex justify-center items-center font-bold text-xl md:text-3xl p-1">PotholePal</h1>
-            </div>
-            
-            <button className=""><img src="src/assets/notification.png" alt="" className="w-5 md:w-10" /></button>
-        </header>
+      {/* Location pill */}
+      <button type="button" className="mx-4 mt-3 flex w-fit items-center gap-1 text-sm font-semibold text-ink">
+        <MapPinIcon className="h-4 w-4 text-primary" />
+        Vereeniging, Gauteng
+        <ChevronDown className="h-4 w-4 text-muted" />
+      </button>
 
-        <br />
-        <div className="flex items-center justify-center gap-2 p-2">
-            <input
+      {/* Search */}
+      <div className="mx-4 mt-3 flex items-center gap-2">
+        <form
+          className="flex flex-1 items-center gap-2 rounded-2xl border border-line bg-white px-3 py-2.5 shadow-sm"
+          onSubmit={(e) => e.preventDefault()}
+        >
+          <SearchIcon className="h-5 w-5 shrink-0 text-muted" />
+          <input
             type="text"
             placeholder="Search street, area, or city..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="border rounded-lg p-2"
-            />
-            <button
-            onClick={() => setQuery(query)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg"
-            >
-            Search
-            </button>
+            className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+          />
+        </form>
+      </div>
+
+      {/* Map */}
+      <div className="mx-4 mt-4 h-[380px] overflow-hidden rounded-3xl border border-line shadow-sm">
+        <LeafletMap markers={markers} className="h-full" zoom={13} />
+      </div>
+
+      {/* Report CTA */}
+      <Link to="/report1" className="mx-4 mt-4 block">
+        <button className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-lg shadow-primary/25 transition-colors hover:bg-primary-dark">
+          <PlusIcon className="h-5 w-5" strokeWidth={2.6} />
+          Report a Pothole
+        </button>
+      </Link>
+
+      {/* Stats */}
+      <div className="mt-5 grid grid-cols-3 px-2 pb-28">
+        <div className="flex flex-col items-center">
+          <h2 className="text-2xl font-extrabold">{nearby}</h2>
+          <p className="text-xs font-medium text-muted">Reports nearby</p>
         </div>
-
-        <br />
-
-        <div className="flex flex-col justify-center items-center w-75 h-100 md:w-150 md:h-100 mt-4 mx-auto">
-            <iframe
-            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d206602.68592737647!2d27.632192596957598!3d-26.608732981011226!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x1e94516555ef05db%3A0x80ef0966d310a25!2sEmfuleni%20Local%20Municipality!5e1!3m2!1sen!2sza!4v1792230650233!5m2!1sen!2sza"
-            className="w-full h-full rounded-lg"
-            allowFullScreen=""
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            ></iframe>
+        <div className="flex flex-col items-center border-x border-line">
+          <h2 className="text-2xl font-extrabold">{total}</h2>
+          <p className="text-xs font-medium text-muted">Total reports</p>
         </div>
-        <Link to="/report1" className="text-center mx-auto">
-            <button className="text-white font-semibold bg-blue-500 w-50 h-12 md:h-10 p-3 md:p-1 mt-2 mx-auto text-center rounded-xl">+ Report a Pothole</button>
-        </Link>
-        
-        <div className="flex justify-center gap-5 py-2">
-            {/* Column 1 */}
-            <div className="flex flex-col items-center">
-                <h1 className="text-xl font-bold">128</h1>
-                <h1 className="text-lg">Reports today</h1>
-            </div>
-
-            {/* Column 2 */}
-            <div className="flex flex-col items-center">
-                <h1 className="text-xl font-bold">864</h1>
-                <h1 className="text-lg">Total reports</h1>
-            </div>
-
-            {/* Column 3 */}
-            <div className="flex flex-col items-center">
-                <h1 className="text-xl font-bold">312</h1>
-                <h1 className="text-lg">Fixed</h1>
-            </div>
+        <div className="flex flex-col items-center">
+          <h2 className="text-2xl font-extrabold">312</h2>
+          <p className="text-xs font-medium text-muted">Fixed</p>
         </div>
-        <NavBar />
+      </div>
+
+      <NavBar />
     </div>
-
-  )
+  );
 }
 
-export default Home
+export default Home;

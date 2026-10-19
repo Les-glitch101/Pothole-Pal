@@ -1,15 +1,17 @@
-function PageIndicator({ current, total }) {
+/** Segmented progress bar used across the report flow (4 short bars, bars fill as you advance). */
+function PageIndicator({ current, total = 4 }) {
   return (
-    <div className="flex justify-center gap-2 mt-4">
+    <div className="flex items-center gap-1.5">
       {Array.from({ length: total }).map((_, i) => (
-        <div
+        <span
           key={i}
-          className={`w-3 h-3 rounded-full ${
-            i + 1 === current ? "bg-blue-500" : "bg-gray-300"
+          className={`h-1.5 flex-1 rounded-full transition-colors ${
+            i < current ? "bg-primary" : "bg-line"
           }`}
-        ></div>
+        />
       ))}
     </div>
-  )
+  );
 }
-export default PageIndicator
+
+export default PageIndicator;

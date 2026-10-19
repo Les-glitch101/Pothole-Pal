@@ -1,114 +1,121 @@
-import PageIndicator from "../components/pageIndicator"
-import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import FlowHeader from "../components/FlowHeader";
+import {
+  MapPinIcon,
+  PencilIcon,
+  AlertIcon,
+  TrafficIcon,
+  CarIcon,
+  MessageIcon,
+  CalendarIcon,
+} from "../lib/icons";
+import { useFlow } from "../context/flow";
+import { POTHOLE_IMG } from "../lib/data";
 
-function ReportPotholePage4() {
-    const routerLocation = useLocation();
-    const photo = routerLocation.state?.photo;
-    const [address, setAddress] = useState("123 Maple Ave, Riverton, CA 94016");
-    const [severity, setSeverity] = useState("Moderate");
-    const [trafficImpact, setTrafficImpact] = useState("Some");
-    const [vehicleDamage, setVehicleDamage] = useState("No");
-    const [details, setDetails] = useState("Large pothole, about 1 foot wide. Causes vehicles to swerve.");
-
-    const [editingField, setEditingField] = useState(null);
-
-    const PencilIcon = () => (
-        <svg
-        xmlns="http://www.w3.org/2000/svg"
-        className="w-4 h-4 text-gray-500 cursor-pointer"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.232-6.232a2 2 0 112.828 2.828L11.828 13.828a2 2 0 01-1.414.586H9v-2z" />
-        </svg>
-    );
-
-    // Reusable editable field
-    const EditableField = ({ label, value, field, setter }) => (
-        <div className="flex items-center justify-between mb-2">
-        {editingField === field ? (
-            <input
-            type="text"
-            value={value}
-            onChange={(e) => setter(e.target.value)}
-            onBlur={() => setEditingField(null)}
-            className="border rounded-lg p-1 w-full mr-2"
-            autoFocus
-            />
-        ) : (
-            <p>
-            <span className="font-semibold">{label}:</span> {value}
-            </p>
-        )}
-        <span onClick={() => setEditingField(field)}>
-            <PencilIcon />
-        </span>
-        </div>
-    );
-
-
-    return (
-        <div className="flex flex-col w-full">
-            <div className="flex flex-row p-3 w-full">
-                <button><img src="src/assets/Back.png" alt="Back arrow icon" className="w-5" /></button>
-                <span className="text-center mx-auto font-bold">Report a Pothole</span>
-            </div>
-
-            <span className="text-center mx-auto">4 of 4</span>
-            <PageIndicator current={4} total={4} />
-
-            <div className="flex flex-col max-w-md mx-auto p-4">
-                {/* Photo */}
-                {photo && (
-                    <img
-                    src={photo}
-                    alt="Pothole"
-                    className="w-full rounded-lg mb-4"
-                    />
-                )}
-
-                {/* Editable report details */}
-                <div className="flex items-center gap-2 mt-3">
-                    <img
-                        src="src/assets/Location.png"
-                        alt="Location Icon"
-                        className="w-7"
-                    />
-                    <EditableField
-                        label="Location"
-                        value={address}
-                        field="address"
-                        setter={setAddress}
-                    />
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                    <img src="src/assets/Caution.png" alt="Caution Icon" className="w-7" />
-                    <EditableField label="Severity" value={severity} field="severity" setter={setSeverity} />
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                    <img src="src/assets/Traffic.png" alt="Traffic Icon" className="w-7" />
-                    <EditableField label="Traffic impact" value={trafficImpact} field="trafficImpact" setter={setTrafficImpact} />
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                    <img src="src/assets/Damage.png" alt="Damage Icon" className="w-7" />
-                    <EditableField label="Vehicle damage" value={vehicleDamage} field="vehicleDamage" setter={setVehicleDamage} />
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                    <img src="src/assets/List.png" alt="List Icon" className="w-7" />
-                    <EditableField label="Additional details" value={details} field="details" setter={setDetails} />
-                </div>
-                
-
-                {/* Submit button */}
-                <button className="bg-blue-500 text-white font-semibold px-6 py-3 rounded-lg w-full mt-6">
-                    Submit Report
-                </button>
-            </div>
-        </div>
-        
-    );
+function ReviewRow({ Icon, label, value, onEdit }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-line py-3.5 last:border-0">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-muted">{label}</p>
+        <p className="truncate text-sm font-bold text-ink">{value}</p>
+      </div>
+      <button
+        type="button"
+        aria-label={`Edit ${label}`}
+        onClick={onEdit}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary hover:bg-primary-soft"
+      >
+        <PencilIcon className="h-4 w-4" />
+      </button>
+    </div>
+  );
 }
 
-export default ReportPotholePage4
+function ReportPotholePage4() {
+  const navigate = useNavigate();
+  const { draft, submitDraft } = useFlow();
+
+  const submit = () => {
+    const report = submitDraft();
+    navigate(`/report-details/${report.id}`, { replace: true });
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col bg-white pb-8">
+      <FlowHeader step={4} onBack={() => navigate("/report3")} />
+
+      <div className="mt-5 px-5">
+        <h2 className="text-lg font-extrabold">Review your report</h2>
+
+        {/* Photo card */}
+        <div className="mt-4 rounded-3xl border border-line bg-white p-3.5 shadow-sm">
+          <img src={draft.photo || POTHOLE_IMG} alt="Reported pothole" className="h-44 w-full rounded-2xl object-cover" />
+          <div className="mt-3 flex items-center justify-between">
+            <span className="rounded-md bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary">
+              {draft.issueType}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate("/report1")}
+              className="text-xs font-bold text-primary"
+            >
+              Edit photo
+            </button>
+          </div>
+        </div>
+
+        {/* Details */}
+        <div className="mt-4 rounded-3xl border border-line bg-white px-3.5 shadow-sm">
+          <ReviewRow
+            Icon={MapPinIcon}
+            label="Location"
+            value={draft.address}
+            onEdit={() => navigate("/report2")}
+          />
+          <ReviewRow
+            Icon={AlertIcon}
+            label="Issue details"
+            value={`${draft.issueType} · ${draft.size} size · ${draft.depth} depth`}
+            onEdit={() => navigate("/report3")}
+          />
+          <ReviewRow
+            Icon={TrafficIcon}
+            label="Traffic impact"
+            value={draft.traffic}
+            onEdit={() => navigate("/report3")}
+          />
+          <ReviewRow
+            Icon={CarIcon}
+            label="Vehicle damage"
+            value={draft.damage}
+            onEdit={() => navigate("/report3")}
+          />
+          <ReviewRow
+            Icon={MessageIcon}
+            label="Additional details"
+            value={draft.description || "—"}
+            onEdit={() => navigate("/report3")}
+          />
+        </div>
+
+        {/* Submit */}
+        <button
+          type="button"
+          onClick={submit}
+          className="mt-6 w-full rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-lg shadow-primary/25 transition-colors hover:bg-primary-dark"
+        >
+          Submit Report
+        </button>
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted">
+          <CalendarIcon className="h-3.5 w-3.5" />
+          Your report helps make our roads safer.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default ReportPotholePage4;

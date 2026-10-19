@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pothole Pal, where we are so far</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #16181d;
+    --muted: #616a78;
+    --line: #e3e6eb;
+    --blue: #2563eb;
+    --green: #15803d;
+    --amber: #b45309;
+    --red: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 40px 0 14px; }
+  .sub { color: var(--muted); margin: 0; }
+  .grid { display: grid; gap: 18px; }
+  .g4 { grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .phone {
+    background: #111318;
+    border-radius: 20px;
+    padding: 8px 8px 14px;
+  }
+  .phone iframe {
+    display: block;
+    width: 100%;
+    height: 420px;
+    border: 0;
+    border-radius: 12px;
+    background: #fff;
+  }
+  .screen-name { color: #fff; font-size: 13px; margin: 8px 4px 0; }
+  .screen-name small { color: #9aa3b2; display: block; }
+  .chip {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 999px;
+    margin-top: 8px;
+  }
+  .ok   { background: #dcfce7; color: var(--green); }
+  .part { background: #fef3c7; color: var(--amber); }
+  .dead { background: #fee2e2; color: var(--red); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: top; }
+  th { background: #fafbfc; font-size: 13px; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .step b { display: block; font-size: 13px; }
+  .step span { color: var(--muted); }
+  .arrow { color: var(--muted); font-size: 16px; }
+  .broken { border-color: #fca5a5; background: #fef2f2; }
+  ul { margin: 8px 0 0; padding-left: 18px; }
+  li { margin-bottom: 6px; }
+  .muted { color: var(--muted); }
+  .bar { background: var(--line); border-radius: 999px; height: 8px; overflow: hidden; margin-top: 6px; }
+  .bar i { display: block; height: 100%; background: var(--blue); }
+  .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .kv:last-child { border-bottom: 0; }
+  .kv span:last-child { color: var(--muted); text-align: right; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Pothole Pal: what we have so far</h1>
+  <p class="sub">Status board, 19 October 2026. The phone previews below are live, they load the running dev server at 127.0.0.1:5173, so they only render while it runs.</p>
+
+  <h2>Every screen, running right now</h2>
+  <div class="grid g4">
+    <div class="card">
+      <div class="phone"><iframe src="/" title="Home"></iframe>
+        <div class="screen-name">Home <small>map, stats, report button</small></div></div>
+      <span class="chip ok">renders, stats are fake</span>
+    </div>
+    <div class="card">
+      <div class="phone"><iframe src="/map" title="Map"></iframe>
+        <div class="screen-name">Map <small>status filter chips</small></div></div>
+      <span class="chip part">filters do nothing yet</span>
+    </div>
+    <div class="card">
+      <div class="phone"><iframe src="/profile" title="Profile"></iframe>
+        <div class="screen-name">Profile <small>points, badges, menu</small></div></div>
+      <span class="chip part">4 badge images missing</span>
+    </div>
+    <div class="card">
+      <div class="phone"><iframe src="/report1" title="Report step 1"></iframe>
+        <div class="screen-name">Report 1 of 4 <small>photo capture</small></div></div>
+      <span class="chip part">jumps to step 4, skips 2 and 3</span>
+    </div>
+    <div class="card">
+      <div class="phone"><iframe src="/report2" title="Report step 2"></iframe>
+        <div class="screen-name">Report 2 of 4 <small>location confirm</small></div></div>
+      <span class="chip part">buttons not wired</span>
+    </div>
+    <div class="card">
+      <div class="phone"><iframe src="/report3" title="Report step 3"></iframe>
+        <div class="screen-name">Report 3 of 4 <small>severity and details</small></div></div>
+      <span class="chip part">form state not passed on</span>
+    </div>
+    <div class="card">
+      <div class="phone"><iframe src="/report4" title="Report step 4"></iframe>
+        <div class="screen-name">Report 4 of 4 <small>review and submit</small></div></div>
+      <span class="chip part">submit does nothing</span>
+    </div>
+    <div class="card">
+      <div class="phone" style="display:flex;align-items:center;justify-content:center;height:420px;background:#fef2f2;border:1px dashed #fca5a5;">
+        <div style="color:#b91c1c;font-size:14px;text-align:center;padding:20px;">/report<br><span style="color:#7f1d1d;">navbar "Reports" link<br>lands on a blank page</span></div>
+      </div>
+      <div class="screen-name">Missing route <small>no matching route</small></div>
+      <span class="chip dead">broken link</span>
+    </div>
+  </div>
+
+  <h2>How the report flow actually behaves today</h2>
+  <div class="flow">
+    <div class="step"><b>Home</b><span>+ Report a Pothole</span></div>
+    <span class="arrow">&rarr;</span>
+    <div class="step"><b>Step 1: photo</b><span>works, Next enabled after pick</span></div>
+    <span class="arrow">&rarr;</span>
+    <div class="step broken"><b>Step 4: review</b><span>navigates straight here, state only carries the photo</span></div>
+    <span class="arrow">&rarr;</span>
+    <div class="step broken"><b>Submit</b><span>no handler, no record, no reference number</span></div>
+  </div>
+  <div class="flow" style="margin-top:10px;">
+    <div class="step broken"><b>Step 2: location</b><span>reachable only by typing /report2, Confirm Location is dead</span></div>
+    <span class="arrow">&middot;</span>
+    <div class="step broken"><b>Step 3: severity</b><span>reachable only by typing /report3, Next is dead, values never reach step 4</span></div>
+    <span class="arrow">&middot;</span>
+    <div class="step broken"><b>Back buttons</b><span>every back arrow in the flow has no handler</span></div>
+  </div>
+
+  <h2>Build status against the planned features</h2>
+  <table>
+    <tr><th style="width:26%">Planned feature</th><th style="width:16%">State</th><th>Notes</th></tr>
+    <tr><td>Reporting form (photo, location, severity)</td><td><span class="chip part">UI only</span></td><td>All four screens exist as static UI. Nothing is submitted anywhere, no reference number is generated, step 2 and 3 are orphaned.</td></tr>
+    <tr><td>Status tracker for residents</td><td><span class="chip dead">not started</span></td><td>No page, no data, no route.</td></tr>
+    <tr><td>Duplicate matching</td><td><span class="chip dead">not started</span></td><td>Planned as geo-distance plus time window. No backend to run it in yet.</td></tr>
+    <tr><td>Priority classification</td><td><span class="chip dead">not started</span></td><td>The severity picker on step 3 is the only related piece, and its value is dropped.</td></tr>
+    <tr><td>Staff dashboard with Leaflet backlog map</td><td><span class="chip dead">not started</span></td><td>Current map screens are Google Maps iframes, no markers, no data layer. Leaflet is not installed.</td></tr>
+    <tr><td>Notifications</td><td><span class="chip dead">not started</span></td><td>The bell icon on Home is decoration.</td></tr>
+    <tr><td>Backend API and database</td><td><span class="chip dead">not started</span></td><td>Docs plan MySQL plus SQL Server and endpoints like POST /reports. The repo has no server folder at all.</td></tr>
+    <tr><td>Tests</td><td><span class="chip dead">none</span></td><td>No test files, no test runner configured. A4 (evaluation, 5 marks) needs test evidence.</td></tr>
+  </table>
+
+  <div class="grid g2" style="margin-top:18px;">
+    <div class="card">
+      <h2 style="margin-top:0;">Where attention is needed now</h2>
+      <ul>
+        <li><b>Broken nav link.</b> The Reports tab points at /report, which renders an empty page.</li>
+        <li><b>Dead buttons throughout.</b> Confirm Location, both Next buttons, Submit Report, every back arrow, the Home search, and the Map filter chips have no handlers.</li>
+        <li><b>Report flow skips steps.</b> Step 1 navigates to /report4, and step 4 shows hardcoded values (address "123 Maple Ave, Riverton, CA") instead of what the user typed.</li>
+        <li><b>Lint fails.</b> 2 errors in ReportPotholePage3.jsx: severity and setSeverity declared but unused.</li>
+        <li><b>Missing assets.</b> profile-photo.png, first-report.png, road-guardian.png, community-hero.png and fast-reporter.png are referenced but not in src/assets, so Profile shows broken images.</li>
+        <li><b>Images use dev-only paths.</b> Every icon is referenced as a plain "src/assets/..." string, which Vite only serves in dev mode. A production build breaks all of them; they should be imports.</li>
+        <li><b>No backend, no data.</b> The 128 / 864 / 312 stats are hardcoded, so the accountability numbers the dissertation evaluates do not exist yet.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Timeline pressure</h2>
+      <div class="kv"><span>Today</span><span>Mon 19 Oct, start of week 3 (build and test)</span></div>
+      <div class="kv"><span>Chapter drafts due</span><span>Fri 23 Oct, four drafts land</span></div>
+      <div class="kv"><span>Triage comparison + figures</span><span>Thu 22 Oct</span></div>
+      <div class="kv"><span>Scope freeze</span><span>already passed, Tue of this week</span></div>
+      <div class="kv"><span>Dissertation submission</span><span>Thu 29 Oct</span></div>
+      <p class="muted" style="font-size:14px;margin-top:12px;">Ten days to the deadline. The UI shell is the easy half; the backend, duplicate matching, priority classification and any test evidence are still at zero.</p>
+      <div style="margin-top:10px;font-size:14px;">UI shell<div class="bar"><i style="width:70%"></i></div></div>
+      <div style="margin-top:10px;font-size:14px;">Working report flow<div class="bar"><i style="width:15%"></i></div></div>
+      <div style="margin-top:10px;font-size:14px;">Backend and data<div class="bar"><i style="width:2%"></i></div></div>
+      <div style="margin-top:10px;font-size:14px;">Testing evidence<div class="bar"><i style="width:2%"></i></div></div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-top:18px;">
+    <div class="card">
+      <h2 style="margin-top:0;">Stack</h2>
+      <div class="kv"><span>Language</span><span>JavaScript (JSX), no TypeScript</span></div>
+      <div class="kv"><span>Framework</span><span>React 19.1</span></div>
+      <div class="kv"><span>Build</span><span>Vite 7.3</span></div>
+      <div class="kv"><span>Styling</span><span>Tailwind CSS 4 (via @tailwindcss/vite)</span></div>
+      <div class="kv"><span>Routing</span><span>react-router-dom 7.18 (7 routes)</span></div>
+      <div class="kv"><span>Maps</span><span>Google Maps embed iframe</span></div>
+      <div class="kv"><span>Lint</span><span>ESLint 9, currently failing with 2 errors</span></div>
+      <div class="kv"><span>Backend / DB</span><span>none yet (MySQL + SQL Server planned)</span></div>
+      <div class="kv"><span>Tests</span><span>none</span></div>
+      <div class="kv"><span>Repo</span><span>1 commit, "Initial commit", node_modules not committed</span></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Project layout</h2>
+      <div class="kv"><span>src/pages/</span><span>Home, Map, Profile, ReportPotholePage1-4</span></div>
+      <div class="kv"><span>src/components/</span><span>navbar, pageIndicator</span></div>
+      <div class="kv"><span>src/assets/</span><span>17 PNG icons plus Logo</span></div>
+      <div class="kv"><span>The-City-Fix-Team/</span><span>charter, requirements, risk register, week-by-week plan</span></div>
+      <div class="kv"><span>Root</span><span>package.json, vite.config.js, eslint.config.js, index.html</span></div>
+      <p class="muted" style="font-size:14px;margin-top:12px;">Team of four: Lesiamo (lead, backend and API), Crystal (requirements, priority classifier), Kgosi (interviews, wireframes), Raymond (UI/UX and front end). Emfuleni Local Municipality is the case focus.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
