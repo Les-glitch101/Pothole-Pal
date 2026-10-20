@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FlowHeader from "../components/FlowHeader";
 import {
@@ -11,6 +12,7 @@ import {
 } from "../lib/icons";
 import { useFlow } from "../context/flow";
 import { POTHOLE_IMG } from "../lib/data";
+import { api, photoToBlob } from "../lib/api";
 
 function ReviewRow({ Icon, label, value, onEdit }) {
   return (
@@ -37,10 +39,45 @@ function ReviewRow({ Icon, label, value, onEdit }) {
 function ReportPotholePage4() {
   const navigate = useNavigate();
   const { draft, submitDraft } = useFlow();
+  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+  const [duplicateRef, setDuplicateRef] = useState(null);
+  const [evidenceDone, setEvidenceDone] = useState(false);
 
-  const submit = () => {
-    const report = submitDraft();
-    navigate(`/report-details/${report.id}`, { replace: true });
+  const submit = async () => {
+    setBusy(true);
+    setSubmitError(null);
+    setDuplicateRef(null);
+    setEvidenceDone(false);
+    try {
+      const report = await submitDraft();
+      navigate(`/report-details/${report.id}`, { replace: true });
+    } catch (err) {
+      setSubmitError(err.message || "Could not submit the report. Is the server running?");
+      if (err.code === "duplicate_report") setDuplicateRef(err.ref);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const attachEvidence = async () => {
+    if (!duplicateRef) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      const photo = await photoToBlob(draft.photo);
+      if (photo) form.append("photo", photo, "photo.jpg");
+      await api(`/reports/${duplicateRef.replace("#", "")}/evidence`, {
+        method: "POST",
+        form,
+        role: "resident",
+      });
+      setEvidenceDone(true);
+    } catch (err) {
+      setSubmitError(err.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -101,13 +138,45 @@ function ReportPotholePage4() {
           />
         </div>
 
+        {/* Duplicate warning (FR-03) and evidence attach */}
+        {submitError && (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm">
+            <p className="font-bold text-red-600">{submitError}</p>
+            {duplicateRef && !evidenceDone && (
+              <button
+                type="button"
+                onClick={attachEvidence}
+                disabled={busy}
+                className="mt-2 font-bold text-primary hover:underline disabled:opacity-60"
+              >
+                Add my photo as supporting evidence
+              </button>
+            )}
+            {evidenceDone && (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <p className="font-semibold text-emerald-600">
+                  Photo attached to {duplicateRef}.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/report-details/${duplicateRef.replace("#", "")}`)}
+                  className="font-bold text-primary hover:underline"
+                >
+                  View report
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Submit */}
         <button
           type="button"
           onClick={submit}
-          className="mt-6 w-full rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-lg shadow-primary/25 transition-colors hover:bg-primary-dark"
+          disabled={busy}
+          className="mt-6 w-full rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-lg shadow-primary/25 transition-colors hover:bg-primary-dark disabled:opacity-60"
         >
-          Submit Report
+          {busy ? "Submitting..." : "Submit Report"}
         </button>
         <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted">
           <CalendarIcon className="h-3.5 w-3.5" />

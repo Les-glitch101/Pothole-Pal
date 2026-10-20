@@ -29,9 +29,13 @@ const MENU = [
 
 function Profile() {
   const navigate = useNavigate();
-  const { myReports } = useFlow();
+  const { myReports, resident, signOut } = useFlow();
 
-  const reports = 48 + myReports.length;
+  const name = resident?.user?.name || "Resident";
+  const points = resident?.user?.points ?? 0;
+  const level = resident?.user?.level ?? 1;
+  const reports = myReports.length;
+  const fixedCount = myReports.filter((r) => r.status === "fixed").length;
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
@@ -52,17 +56,17 @@ function Profile() {
         <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary-soft ring-4 ring-primary/15">
           <UserIcon className="h-12 w-12 text-primary" strokeWidth={1.6} />
         </div>
-        <h2 className="mt-3 text-xl font-extrabold">Alex R.</h2>
+        <h2 className="mt-3 text-xl font-extrabold">{name}</h2>
         <p className="text-sm font-bold text-primary">Road Guardian</p>
         <span className="mt-2 rounded-full bg-primary-soft px-3 py-1 text-xs font-bold text-primary">
-          Level 3
+          Level {level}
         </span>
       </div>
 
       {/* Stats */}
       <div className="mt-5 grid grid-cols-3 px-4">
         <div className="flex flex-col items-center">
-          <p className="text-xl font-extrabold">1,250</p>
+          <p className="text-xl font-extrabold">{points.toLocaleString()}</p>
           <p className="text-xs text-muted">Points</p>
         </div>
         <div className="flex flex-col items-center border-x border-line">
@@ -70,7 +74,7 @@ function Profile() {
           <p className="text-xs text-muted">Reports</p>
         </div>
         <div className="flex flex-col items-center">
-          <p className="text-xl font-extrabold">12</p>
+          <p className="text-xl font-extrabold">{fixedCount}</p>
           <p className="text-xs text-muted">Issues Fixed</p>
         </div>
       </div>
@@ -118,17 +122,28 @@ function Profile() {
       {/* Demo entry to the municipality portal (separate persona, no auth yet) */}
       <button
         type="button"
-        onClick={() => navigate("/dashboard")}
+        onClick={() => navigate("/staff")}
         className="mx-4 mt-3 flex items-center gap-3 rounded-2xl bg-navy px-4 py-3 text-left text-white transition-opacity hover:opacity-90"
       >
         <ShieldIcon className="h-5 w-5 text-white/80" />
         <span className="flex-1 text-sm font-bold">
           Municipality portal
           <span className="ml-2 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-            demo
+            staff
           </span>
         </span>
         <ChevronRight className="h-5 w-5 text-white/60" />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          signOut("resident");
+          navigate("/login");
+        }}
+        className="mx-4 mt-3 flex items-center justify-center gap-2 rounded-2xl border border-line py-3 text-sm font-bold text-red-600 transition-colors hover:bg-red-50"
+      >
+        Sign out
       </button>
 
       <div className="pb-8" />

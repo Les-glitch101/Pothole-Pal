@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import LeafletMap from "../components/LeafletMap";
 import {
@@ -10,7 +10,9 @@ import {
   MapPinIcon,
   ChevronRight,
 } from "../lib/icons";
-import { DASH_STATS, DASH_RECENT, HEAT_POINTS, SEED_REPORTS, STATUS } from "../lib/data";
+import { STATUS } from "../lib/data";
+import { useFlow } from "../context/flow";
+import { api } from "../lib/api";
 
 const TABS = ["Overview", "Reports", "Teams", "Analytics"];
 
@@ -21,7 +23,7 @@ const CREWS = [
 ];
 
 function severityTone(sev) {
-  if (sev === "High") return { bg: "#fee2e2", color: "#dc2626" };
+  if (sev === "High" || sev === "Severe") return { bg: "#fee2e2", color: "#dc2626" };
   if (sev === "Medium") return { bg: "#fef3c7", color: "#d97706" };
   return { bg: "#dcfce7", color: "#16a34a" };
 }
@@ -29,6 +31,30 @@ function severityTone(sev) {
 function Dashboard() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("Overview");
+  const [stats, setStats] = useState(null);
+  const { reports, signOut } = useFlow();
+
+  useEffect(() => {
+    api("/staff/stats", { role: "staff" })
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, []);
+
+  // The queue is the same live list the resident app sees, ordered by the
+  // priority score so triage starts with the worst reports.
+  const queue = useMemo(
+    () => [...reports].sort((a, b) => b.score - a.score || b.id - a.id),
+    [reports],
+  );
+
+  const tiles = stats
+    ? [
+        { label: stats.total.toLocaleString(), sub: "Total Reports", tone: "#fee2e2", color: "#ef4444" },
+        { label: String(stats.newCount), sub: "New Reports", tone: "#fef3c7", color: "#d97706" },
+        { label: String(stats.fixedCount), sub: "Fixed Issues", tone: "#dcfce7", color: "#16a34a" },
+        { label: `${stats.resolutionRate}%`, sub: "Resolution Rate", tone: "#dbe4ff", color: "#1d5beb" },
+      ]
+    : [];
 
   return (
     <div className="flex min-h-screen flex-col bg-navy text-white">
@@ -37,7 +63,7 @@ function Dashboard() {
         <button
           type="button"
           aria-label="Exit portal"
-          onClick={() => navigate("/profile")}
+          onClick={() => signOut("staff")}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
         >
           <MenuIcon className="h-5 w-5" />
@@ -72,9 +98,9 @@ function Dashboard() {
       <div className="flex-1 px-4 pb-8">
         {tab === "Overview" && (
           <>
-            {/* Stat tiles */}
+            {/* Stat tiles (real numbers from the database) */}
             <div className="mt-4 grid grid-cols-2 gap-3">
-              {DASH_STATS.map((s) => (
+              {tiles.map((s) => (
                 <div key={s.sub} className="rounded-3xl p-4" style={{ background: s.tone }}>
                   <p className="text-2xl font-extrabold" style={{ color: s.color }}>
                     {s.label}
@@ -89,11 +115,11 @@ function Dashboard() {
               <div className="flex items-center justify-between px-4 pt-3.5">
                 <h2 className="text-sm font-extrabold text-ink">Report Heatmap</h2>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
-                  Last 30 days
+                  All open reports
                 </span>
               </div>
               <div className="mt-3 h-52">
-                <LeafletMap heat={HEAT_POINTS} zoom={13} className="h-full" />
+                <LeafletMap heat={stats?.heat || []} zoom={13} className="h-full" />
               </div>
             </div>
 
@@ -110,9 +136,9 @@ function Dashboard() {
                 </button>
               </div>
               <ul className="mt-3 space-y-2.5">
-                {DASH_RECENT.map((r) => {
-                  const tone = severityTone(r.severity);
-                  const status = Object.values(STATUS).find((s) => s.label === r.status) || STATUS.new;
+                {(stats?.recent || []).map((r) => {
+                  const tone = severityTone(r.severityNote);
+                  const status = STATUS[r.status] || STATUS.new;
                   return (
                     <li key={r.id} className="flex items-center gap-3">
                       <span
@@ -122,18 +148,21 @@ function Dashboard() {
                         <AlertIcon className="h-5 w-5" />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-ink">{r.name}</p>
+                        <p className="truncate text-sm font-bold text-ink">{r.reporter || "Resident"}</p>
                         <p className="truncate text-xs text-muted">{r.area}</p>
                       </div>
                       <span
                         className="shrink-0 rounded-md px-2 py-1 text-[11px] font-bold"
                         style={{ background: status.bg, color: status.color }}
                       >
-                        {r.status}
+                        {status.label}
                       </span>
                     </li>
                   );
                 })}
+                {stats && (stats.recent || []).length === 0 && (
+                  <p className="text-xs font-semibold text-muted">No reports yet.</p>
+                )}
               </ul>
             </div>
           </>
@@ -141,8 +170,8 @@ function Dashboard() {
 
         {tab === "Reports" && (
           <ul className="mt-4 space-y-2.5">
-            {SEED_REPORTS.map((r) => {
-              const status = STATUS[r.status];
+            {queue.map((r) => {
+              const status = STATUS[r.status] || STATUS.new;
               const tone = severityTone(r.severityNote);
               return (
                 <li key={r.id}>
@@ -162,7 +191,7 @@ function Dashboard() {
                         #{r.id} · {r.area}
                       </p>
                       <p className="truncate text-xs text-muted">
-                        {r.severityNote} severity · {r.reportedAt}
+                        {r.priority} · {r.severityNote} severity · {r.reportedAt}
                       </p>
                     </div>
                     <span
@@ -175,6 +204,9 @@ function Dashboard() {
                 </li>
               );
             })}
+            {queue.length === 0 && (
+              <p className="mt-6 text-center text-sm font-semibold text-white/60">No reports in the queue.</p>
+            )}
           </ul>
         )}
 
@@ -224,7 +256,8 @@ function Dashboard() {
               ))}
             </div>
             <p className="mt-3 text-xs text-muted">
-              Mock figures — wired to real data once the backend lands.
+              Sample figures. The seeded dataset only covers the last 30 days, so there
+              is no real history to plot yet.
             </p>
           </div>
         )}

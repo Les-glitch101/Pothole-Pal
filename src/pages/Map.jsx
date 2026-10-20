@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import NavBar from "../components/navbar";
 import LeafletMap from "../components/LeafletMap";
 import { SearchIcon, SlidersIcon, ChevronRight } from "../lib/icons";
-import { SEED_REPORTS, FILTERS, STATUS } from "../lib/data";
+import { FILTERS, STATUS } from "../lib/data";
 import { useFlow } from "../context/flow";
 
 function severityChip(note) {
@@ -15,9 +15,9 @@ function severityChip(note) {
 function MapScreen() {
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
-  const { myReports } = useFlow();
+  const { reports } = useFlow();
 
-  const all = [...myReports, ...SEED_REPORTS];
+  const all = reports;
   const q = query.trim().toLowerCase();
   const byQuery = q ? all.filter((r) => r.area.toLowerCase().includes(q)) : all;
   const list = filter === "All" ? byQuery : byQuery.filter((r) => STATUS[r.status].label === filter);

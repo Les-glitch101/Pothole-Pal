@@ -1,18 +1,49 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft, MapPinIcon, CalendarIcon, TrafficIcon, CarIcon, UserIcon, CheckIcon, XIcon } from "../lib/icons";
-import { SEED_REPORTS, STATUS, STAGES, POTHOLE_IMG } from "../lib/data";
+import { STATUS, STAGES, POTHOLE_IMG } from "../lib/data";
 import { useFlow } from "../context/flow";
+import { api } from "../lib/api";
 
 const STAGE_BY_STATUS = { new: 0, review: 1, scheduled: 2, repairing: 3, fixed: 4 };
+
+// The staff action on each status: what clicking "advance" does next.
+const NEXT_STEP = {
+  new: { status: "review", label: "Start review" },
+  review: { status: "scheduled", label: "Schedule repair" },
+  scheduled: { status: "repairing", label: "Start repair" },
+  repairing: { status: "fixed", label: "Mark as fixed" },
+};
 
 function ReportDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { myReports } = useFlow();
+  const { reports, resident, staff, refresh } = useFlow();
   const [following, setFollowing] = useState(false);
+  const [fetched, setFetched] = useState(null);
+  const [acting, setActing] = useState(false);
 
-  const report = [...myReports, ...SEED_REPORTS].find((r) => String(r.id) === String(id));
+  const inList = reports.find((r) => String(r.id) === String(id));
+
+  // The staff portal opens this page straight from its queue, so if the list
+  // in context has no match (different session), fetch the report directly.
+  useEffect(() => {
+    let alive = true;
+    if (!inList && (resident || staff)) {
+      api(`/reports/${id}`, { role: resident ? "resident" : "staff" })
+        .then((r) => {
+          if (alive) setFetched(r);
+        })
+        .catch(() => {
+          if (alive) setFetched(null);
+        });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [id, inList, resident, staff]);
+
+  const report = inList || fetched;
 
   if (!report) {
     return (
@@ -114,7 +145,7 @@ function ReportDetails() {
         </span>
         <div className="flex-1">
           <p className="text-xs text-muted">Reported by</p>
-          <p className="text-sm font-bold">Alex R.</p>
+          <p className="text-sm font-bold">{report.reporter || "Unknown"}</p>
         </div>
         <span className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-bold text-violet-700">
           Road Warrior
@@ -168,6 +199,50 @@ function ReportDetails() {
           })}
         </ol>
       </div>
+
+      {/* Staff actions (shown only in the staff portal session) */}
+      {staff?.user?.role === "staff" && (
+        <div className="mx-4 mt-4 rounded-3xl bg-navy p-4 text-white">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[15px] font-extrabold">Staff actions</h3>
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide">
+              {report.priority}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-white/60">
+            Score {report.score} · {report.duplicateCount} duplicate
+            {report.duplicateCount === 1 ? "" : "s"} reported
+          </p>
+          {NEXT_STEP[report.status] ? (
+            <button
+              type="button"
+              disabled={acting}
+              onClick={async () => {
+                setActing(true);
+                try {
+                  await api(`/reports/${report.id}`, {
+                    method: "PATCH",
+                    body: { status: NEXT_STEP[report.status].status },
+                    role: "staff",
+                  });
+                  await refresh();
+                } catch (err) {
+                  console.error("status change failed:", err);
+                } finally {
+                  setActing(false);
+                }
+              }}
+              className="mt-3 w-full rounded-2xl bg-primary py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-60"
+            >
+              {acting ? "Saving..." : `Advance: ${NEXT_STEP[report.status].label}`}
+            </button>
+          ) : (
+            <p className="mt-3 rounded-2xl bg-white/10 px-3 py-2.5 text-center text-sm font-semibold text-white/70">
+              Repair complete. This report is closed.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

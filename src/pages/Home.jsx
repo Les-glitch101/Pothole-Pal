@@ -1,27 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
 import LeafletMap from "../components/LeafletMap";
 import { SearchIcon, BellIcon, MapPinIcon, ChevronDown, PlusIcon } from "../lib/icons";
-import { SEED_REPORTS, CLUSTERS, STATUS } from "../lib/data";
+import { STATUS } from "../lib/data";
 import { useFlow } from "../context/flow";
+import { api } from "../lib/api";
 
 function Home() {
   const [query, setQuery] = useState("");
+  const [stats, setStats] = useState(null);
   const navigate = useNavigate();
-  const { myReports } = useFlow();
+  const { reports } = useFlow();
 
-  const all = [...myReports, ...SEED_REPORTS];
+  useEffect(() => {
+    api("/stats")
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, []);
+
+  const all = reports;
   const q = query.trim().toLowerCase();
   const filtered = q ? all.filter((r) => r.area.toLowerCase().includes(q)) : all;
 
-  const markers = [
-    ...filtered.map((r) => ({ lat: r.lat, lng: r.lng, color: STATUS[r.status].color })),
-    ...(q ? [] : CLUSTERS.map((c) => ({ ...c, cluster: true, label: c.count }))),
-  ];
+  const markers = filtered.map((r) => ({
+    lat: r.lat,
+    lng: r.lng,
+    color: (STATUS[r.status] || STATUS.new).color,
+  }));
 
-  const nearby = 128 + myReports.length;
-  const total = 844 + myReports.length;
+  const nearby = stats?.nearby ?? 0;
+  const total = stats?.total ?? 0;
+  const fixedCount = stats?.fixed ?? 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
@@ -90,7 +100,7 @@ function Home() {
           <p className="text-xs font-medium text-muted">Total reports</p>
         </div>
         <div className="flex flex-col items-center">
-          <h2 className="text-2xl font-extrabold">312</h2>
+          <h2 className="text-2xl font-extrabold">{fixedCount}</h2>
           <p className="text-xs font-medium text-muted">Fixed</p>
         </div>
       </div>

@@ -1,14 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
 import { ChevronLeft, ChevronRight, PlusIcon } from "../lib/icons";
-import { SEED_REPORTS, STATUS } from "../lib/data";
+import { STATUS } from "../lib/data";
 import { useFlow } from "../context/flow";
 
 function MyReports() {
   const navigate = useNavigate();
   const { myReports } = useFlow();
 
-  const list = [...myReports, ...SEED_REPORTS.filter((r) => r.isMine)];
+  const list = myReports;
 
   return (
     <div className="flex min-h-screen flex-col bg-white">

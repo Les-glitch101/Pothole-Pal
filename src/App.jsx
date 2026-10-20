@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
-import { Routes, Route } from "react-router-dom";
-import { FlowContext, EMPTY_DRAFT } from "./context/flow";
-import { SEED_REPORTS, POTHOLE_IMG } from "./lib/data";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { FlowContext, EMPTY_DRAFT, useFlow } from "./context/flow";
+import { api, getSession, setSession, clearSession, photoToBlob } from "./lib/api";
 
 import Home from "./pages/Home";
 import MapScreen from "./pages/Map";
@@ -10,75 +10,131 @@ import Notifications from "./pages/Notifications";
 import MyReports from "./pages/MyReports";
 import ReportDetails from "./pages/ReportDetails";
 import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+import StaffLogin from "./pages/StaffLogin";
 import ReportPotholePage1 from "./pages/ReportPotholePage1";
 import ReportPotholePage2 from "./pages/ReportPotholePage2";
 import ReportPotholePage3 from "./pages/ReportPotholePage3";
 import ReportPotholePage4 from "./pages/ReportPotholePage4";
 
-const SEVERITY_BY_SIZE = { Small: "Low", Medium: "Medium", Large: "High" };
-const NOTE_BY_SIZE = { Small: "Low", Medium: "Medium", Large: "Severe" };
+function RequireResident({ children }) {
+  const { resident } = useFlow();
+  if (!resident) return <Navigate to="/login" replace />;
+  return children;
+}
 
-function nearestAreaOf(lat, lng) {
-  let best = null;
-  let bestDist = Infinity;
-  for (const r of SEED_REPORTS) {
-    const d = (r.lat - lat) ** 2 + (r.lng - lng) ** 2;
-    if (d < bestDist) {
-      bestDist = d;
-      best = r;
-    }
-  }
-  return best;
+function RequireAnySession({ children }) {
+  const { resident, staff } = useFlow();
+  if (!resident && !staff) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function StaffGate() {
+  const { staff } = useFlow();
+  return staff?.user?.role === "staff" ? <Dashboard /> : <StaffLogin />;
 }
 
 function App() {
   const [draft, setDraftState] = useState(EMPTY_DRAFT);
-  const [myReports, setMyReports] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [resident, setResident] = useState(() => getSession("resident"));
+  const [staff, setStaff] = useState(() => getSession("staff"));
 
   const setDraft = useCallback((patch) => {
     setDraftState((d) => ({ ...d, ...patch }));
   }, []);
 
-  const submitDraft = useCallback(() => {
-    const id = 1025 + myReports.length;
-    const near = nearestAreaOf(draft.lat, draft.lng);
-    const report = {
-      ...draft,
-      id,
-      area: near ? near.area : "Vereeniging",
-      photo: draft.photo || POTHOLE_IMG,
-      severity: SEVERITY_BY_SIZE[draft.size] || "Medium",
-      severityNote: NOTE_BY_SIZE[draft.size] || "Medium",
-      status: "new",
-      reportedAt: "Just now",
-      isMine: true,
-      timeline: ["Just now", "", "", "", ""],
-    };
-    setMyReports((list) => [report, ...list]);
+  const refresh = useCallback(async () => {
+    if (!resident && !staff) {
+      setReports([]);
+      return;
+    }
+    const role = resident ? "resident" : "staff";
+    try {
+      setReports(await api("/reports", { role }));
+    } catch {
+      // A 401 already redirected to the login screen; anything else leaves the
+      // current list in place.
+    }
+  }, [resident, staff]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // Keep both sides of the demo in sync without a manual reload: staff status
+  // changes show up on the resident's screen within a few seconds.
+  useEffect(() => {
+    if (!resident && !staff) return undefined;
+    const timer = setInterval(() => refresh(), 10000);
+    return () => clearInterval(timer);
+  }, [resident, staff, refresh]);
+
+  const signIn = useCallback((role, session) => {
+    setSession(role, session);
+    if (role === "staff") setStaff(session);
+    else setResident(session);
+  }, []);
+
+  const signOut = useCallback((role) => {
+    api("/auth/logout", { method: "POST", role }).catch(() => {});
+    clearSession(role);
+    if (role === "staff") setStaff(null);
+    else setResident(null);
+  }, []);
+
+  const submitDraft = useCallback(async () => {
+    const form = new FormData();
+    const photo = await photoToBlob(draft.photo);
+    if (photo) form.append("photo", photo, "photo.jpg");
+    for (const key of ["lat", "lng", "address", "issueType", "size", "depth", "traffic", "damage", "description"]) {
+      form.append(key, draft[key] ?? "");
+    }
+    const created = await api("/reports", { method: "POST", form, role: "resident" });
     setDraftState(EMPTY_DRAFT);
-    return report;
-  }, [draft, myReports.length]);
+    await refresh();
+    return created;
+  }, [draft, refresh]);
+
+  const myReports = useMemo(() => reports.filter((r) => r.isMine), [reports]);
 
   const value = useMemo(
-    () => ({ draft, setDraft, myReports, submitDraft }),
-    [draft, setDraft, myReports, submitDraft],
+    () => ({
+      draft,
+      setDraft,
+      reports,
+      myReports,
+      refresh,
+      submitDraft,
+      resident,
+      staff,
+      signIn,
+      signOut,
+    }),
+    [draft, setDraft, reports, myReports, refresh, submitDraft, resident, staff, signIn, signOut],
   );
 
   return (
     <FlowContext.Provider value={value}>
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-white shadow-[0_0_40px_rgba(15,23,42,0.06)]">
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/map" element={<MapScreen />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/notifications" element={<Notifications />} />
-          <Route path="/reports" element={<MyReports />} />
-          <Route path="/report-details/:id" element={<ReportDetails />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/report1" element={<ReportPotholePage1 />} />
-          <Route path="/report2" element={<ReportPotholePage2 />} />
-          <Route path="/report3" element={<ReportPotholePage3 />} />
-          <Route path="/report4" element={<ReportPotholePage4 />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/staff" element={<StaffGate />} />
+          <Route path="/dashboard" element={<Navigate to="/staff" replace />} />
+          <Route path="/" element={<RequireResident><Home /></RequireResident>} />
+          <Route path="/map" element={<RequireResident><MapScreen /></RequireResident>} />
+          <Route path="/profile" element={<RequireResident><Profile /></RequireResident>} />
+          <Route path="/notifications" element={<RequireResident><Notifications /></RequireResident>} />
+          <Route path="/reports" element={<RequireResident><MyReports /></RequireResident>} />
+          <Route
+            path="/report-details/:id"
+            element={<RequireAnySession><ReportDetails /></RequireAnySession>}
+          />
+          <Route path="/report1" element={<RequireResident><ReportPotholePage1 /></RequireResident>} />
+          <Route path="/report2" element={<RequireResident><ReportPotholePage2 /></RequireResident>} />
+          <Route path="/report3" element={<RequireResident><ReportPotholePage3 /></RequireResident>} />
+          <Route path="/report4" element={<RequireResident><ReportPotholePage4 /></RequireResident>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </FlowContext.Provider>

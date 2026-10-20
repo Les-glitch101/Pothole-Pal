@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
 import { ChevronLeft, SettingsIcon, CheckCircleIcon, WrenchIcon, AwardIcon, MessageIcon, AlertIcon } from "../lib/icons";
-import { NOTIFICATIONS } from "../lib/data";
+import { api } from "../lib/api";
 
 const ICONS = {
   check: CheckCircleIcon,
@@ -13,6 +14,13 @@ const ICONS = {
 
 function Notifications() {
   const navigate = useNavigate();
+  const [groups, setGroups] = useState(null);
+
+  useEffect(() => {
+    api("/notifications")
+      .then(setGroups)
+      .catch(() => setGroups([]));
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
@@ -37,7 +45,12 @@ function Notifications() {
       </header>
 
       <div className="flex-1 px-4 pb-28">
-        {NOTIFICATIONS.map((group) => (
+        {groups && groups.length === 0 && (
+          <p className="mt-10 text-center text-sm font-semibold text-muted">
+            No notifications yet.
+          </p>
+        )}
+        {(groups || []).map((group) => (
           <section key={group.group}>
             <h2 className="mb-2 mt-4 text-[15px] font-extrabold">{group.group}</h2>
             <ul className="space-y-2.5">
