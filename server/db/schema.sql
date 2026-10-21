@@ -82,3 +82,12 @@ CREATE TABLE dbo.notifications (
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_notifications_user' AND object_id = OBJECT_ID('dbo.notifications'))
     CREATE INDEX IX_notifications_user ON dbo.notifications (user_id, created_at DESC);
+
+-- One active password-reset code per user (see /api/v1/auth/forgot).
+IF OBJECT_ID('dbo.password_resets', 'U') IS NULL
+CREATE TABLE dbo.password_resets (
+    user_id    INT           PRIMARY KEY REFERENCES dbo.users (id),
+    code_hash  NVARCHAR(200) NOT NULL,
+    expires_at DATETIME2     NOT NULL,
+    created_at DATETIME2     NOT NULL CONSTRAINT DF_resets_created DEFAULT (SYSUTCDATETIME())
+);

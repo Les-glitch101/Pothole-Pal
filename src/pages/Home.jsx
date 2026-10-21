@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
 import LeafletMap from "../components/LeafletMap";
-import { SearchIcon, BellIcon, MapPinIcon, ChevronDown, PlusIcon } from "../lib/icons";
+import { SearchIcon, BellIcon, MapPinIcon, PlusIcon } from "../lib/icons";
 import { STATUS } from "../lib/data";
 import { useFlow } from "../context/flow";
 import { api } from "../lib/api";
@@ -24,6 +24,7 @@ function Home() {
   const filtered = q ? all.filter((r) => r.area.toLowerCase().includes(q)) : all;
 
   const markers = filtered.map((r) => ({
+    id: r.id,
     lat: r.lat,
     lng: r.lng,
     color: (STATUS[r.status] || STATUS.new).color,
@@ -53,11 +54,10 @@ function Home() {
       </header>
 
       {/* Location pill */}
-      <button type="button" className="mx-4 mt-3 flex w-fit items-center gap-1 text-sm font-semibold text-ink">
+      <div className="mx-4 mt-3 flex w-fit items-center gap-1 text-sm font-semibold text-ink">
         <MapPinIcon className="h-4 w-4 text-primary" />
-        Vereeniging, Gauteng
-        <ChevronDown className="h-4 w-4 text-muted" />
-      </button>
+        Emfuleni District
+      </div>
 
       {/* Search */}
       <div className="mx-4 mt-3 flex items-center gap-2">
@@ -78,7 +78,12 @@ function Home() {
 
       {/* Map */}
       <div className="mx-4 mt-4 h-[380px] overflow-hidden rounded-3xl border border-line shadow-sm">
-        <LeafletMap markers={markers} className="h-full" zoom={13} />
+        <LeafletMap
+          markers={markers}
+          className="h-full"
+          zoom={13}
+          onMarkerSelect={(m) => navigate(`/report-details/${m.id}`)}
+        />
       </div>
 
       {/* Report CTA */}

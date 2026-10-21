@@ -32,7 +32,9 @@ export async function photoToBlob(src) {
   return null;
 }
 
-export async function api(path, { method = "GET", body, form, role = "resident" } = {}) {
+// noRedirect: used by the sign-in style calls, where a 401 is a wrong password
+// to show in the form rather than a lost session that bounces to /login.
+export async function api(path, { method = "GET", body, form, role = "resident", noRedirect = false } = {}) {
   const session = getSession(role);
   const headers = {};
   if (session?.token) headers.Authorization = `Bearer ${session.token}`;
@@ -46,8 +48,12 @@ export async function api(path, { method = "GET", body, form, role = "resident" 
 
   if (res.status === 401) {
     clearSession(role);
-    window.location.assign(role === "staff" ? "/staff" : "/login");
-    throw new Error("Please sign in.");
+    if (!noRedirect) {
+      window.location.assign(role === "staff" ? "/staff" : "/login");
+      throw new Error("Please sign in.");
+    }
+    const body401 = await res.json().catch(() => null);
+    throw new Error(body401?.error?.message || "Please sign in.");
   }
 
   const data = await res.json().catch(() => null);

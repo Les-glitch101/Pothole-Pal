@@ -2,6 +2,7 @@
 // Start: npm start  (reads .env, listens on :3001, serves dist/ when built)
 import crypto from "node:crypto";
 import fs from "node:fs";
+import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -161,6 +162,18 @@ function badId(req, res) {
 }
 
 // ---------------------------------------------------------------- auth
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const STAFF_EMAIL_DOMAIN = "@municipalstaff.com";
+
+function newSession(res, u, status = 200) {
+  const token = crypto.randomUUID();
+  const user = { id: u.id, name: u.name, email: u.email, role: u.role, points: u.points, level: u.level };
+  sessions.set(token, user);
+  res.status(status).json({ token, user });
+}
+
+// One login for both sides: the role in the database decides where the front
+// end sends you, so staff accounts land on the municipal dashboard.
 app.post("/api/v1/auth/login", async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
@@ -174,10 +187,102 @@ app.post("/api/v1/auth/login", async (req, res) => {
   if (!ok) {
     return res.status(401).json({ error: { code: "invalid_credentials", message: "Email or password is incorrect." } });
   }
-  const token = crypto.randomUUID();
-  const user = { id: u.id, name: u.name, email: u.email, role: u.role, points: u.points, level: u.level };
-  sessions.set(token, user);
-  res.json({ token, user });
+  newSession(res, u);
+});
+
+// Resident sign-up. Role is always resident here, and the staff email domain
+// is reserved, so nobody can register their way into the municipal portal.
+app.post("/api/v1/auth/register", async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: { code: "missing_fields", message: "Name, email and password are required." } });
+  }
+  if (email.length > 200 || !EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: { code: "invalid_email", message: "Enter a valid email address." } });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: { code: "weak_password", message: "Password must be at least 8 characters." } });
+  }
+  if (email.endsWith(STAFF_EMAIL_DOMAIN)) {
+    return res.status(400).json({ error: { code: "staff_domain", message: "That email domain is reserved for municipal staff accounts." } });
+  }
+  const { recordset } = await pool.request().input("email", sql.NVarChar(200), email)
+    .query("SELECT id FROM dbo.users WHERE email = @email");
+  if (recordset[0]) {
+    return res.status(409).json({ error: { code: "email_exists", message: "An account with that email already exists. Sign in instead." } });
+  }
+  const hash = await bcrypt.hash(password, 10);
+  const inserted = await pool.request()
+    .input("name", sql.NVarChar(120), name.slice(0, 120))
+    .input("email", sql.NVarChar(200), email)
+    .input("hash", sql.NVarChar(200), hash)
+    .query("INSERT INTO dbo.users (name, email, password_hash, role) OUTPUT INSERTED.id VALUES (@name, @email, @hash, 'resident')");
+  newSession(res, { id: inserted.recordset[0].id, name, email, role: "resident", points: 0, level: 1 }, 201);
+});
+
+// Password reset. There is no mail service in this demo, so the code is
+// returned in the response and the page shows it in a labelled panel; a real
+// deployment would email it instead. The code is stored hashed, lives 15
+// minutes, and can be used once.
+app.post("/api/v1/auth/forgot", async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ error: { code: "missing_email", message: "Email is required." } });
+  }
+  const { recordset } = await pool.request().input("email", sql.NVarChar(200), email)
+    .query("SELECT TOP 1 id FROM dbo.users WHERE email = @email");
+  const u = recordset[0];
+  if (!u) {
+    return res.status(404).json({ error: { code: "no_account", message: "No account with that email address." } });
+  }
+  const code = String(crypto.randomInt(100000, 1000000));
+  const codeHash = await bcrypt.hash(code, 8);
+  const expires = new Date(Date.now() + 15 * 60 * 1000);
+  await pool.request()
+    .input("uid", sql.Int, u.id)
+    .input("codeHash", sql.NVarChar(200), codeHash)
+    .input("expires", sql.DateTime2, expires)
+    .query(`MERGE dbo.password_resets AS target
+            USING (SELECT @uid AS user_id) AS src ON target.user_id = src.user_id
+            WHEN MATCHED THEN UPDATE SET code_hash = @codeHash, expires_at = @expires, created_at = SYSUTCDATETIME()
+            WHEN NOT MATCHED THEN INSERT (user_id, code_hash, expires_at) VALUES (@uid, @codeHash, @expires);`);
+  res.json({ ok: true, demoCode: code, expiresInMinutes: 15 });
+});
+
+app.post("/api/v1/auth/reset", async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const code = String(req.body?.code || "").trim();
+  const password = String(req.body?.password || "");
+  if (!email || !code || !password) {
+    return res.status(400).json({ error: { code: "missing_fields", message: "Email, code and new password are required." } });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: { code: "weak_password", message: "Password must be at least 8 characters." } });
+  }
+  const { recordset } = await pool.request().input("email", sql.NVarChar(200), email)
+    .query("SELECT TOP 1 id, name, email, role, points, level FROM dbo.users WHERE email = @email");
+  const u = recordset[0];
+  const { recordset: resets } = await pool.request()
+    .input("uid", sql.Int, u ? u.id : -1)
+    .query("SELECT TOP 1 code_hash, expires_at FROM dbo.password_resets WHERE user_id = @uid");
+  const row = resets[0];
+  const codeOk = row && (await bcrypt.compare(code, row.code_hash));
+  const expired = row && new Date(row.expires_at).getTime() < Date.now();
+  if (!u || !codeOk || expired) {
+    return res.status(400).json({ error: { code: "invalid_code", message: "That code is invalid or has expired. Request a new one." } });
+  }
+  const hash = await bcrypt.hash(password, 10);
+  await pool.request().input("hash", sql.NVarChar(200), hash).input("uid", sql.Int, u.id)
+    .query("UPDATE dbo.users SET password_hash = @hash WHERE id = @uid");
+  await pool.request().input("uid", sql.Int, u.id)
+    .query("DELETE FROM dbo.password_resets WHERE user_id = @uid");
+  // A changed password signs out every other session for this account.
+  for (const [token, sessionUser] of sessions) {
+    if (sessionUser.id === u.id) sessions.delete(token);
+  }
+  newSession(res, u);
 });
 
 app.post("/api/v1/auth/logout", (req, res) => {
@@ -268,7 +373,7 @@ app.post("/api/v1/reports", requireAuth, upload.single("photo"), async (req, res
     reporter_id: req.user.id,
     lat,
     lng,
-    address: String(b.address || "Vereeniging, Gauteng, South Africa"),
+    address: String(b.address || "Vereeniging, Emphuleni District, Gauteng"),
     area,
     issue_type: String(b.issueType || "Pothole"),
     description: String(b.description || ""),
@@ -523,5 +628,43 @@ if (HAS_DIST) {
 // port, which would silently move the API away from the Vite proxy target.
 const PORT = Number(process.env.PP_PORT || 3001);
 const server = app.listen(PORT, () => {
-  console.log(`PotholePal API on http://localhost:${server.address().port} (db: ${process.env.DB_NAME})`);
+  // address() is null when this callback is reached through the error path
+  // (port already taken), so the error handler below does the talking then.
+  const addr = server.address();
+  if (!addr) return;
+  console.log(`PotholePal API on http://localhost:${addr.port} (db: ${process.env.DB_NAME})`);
 });
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(
+      `Port ${PORT} is already in use: another PotholePal server is already running. ` +
+        "Close that window (Ctrl+C) and start it again.",
+    );
+    process.exit(1);
+  }
+  console.error("Server failed to start:", err.message);
+  process.exit(1);
+});
+
+// ------------------------------------------------------------------ https
+// Phones need a secure context for the live camera and geolocation, and
+// those APIs ignore plain http:// on anything but localhost. When a local
+// certificate exists (npm run certs, gitignored) the same app is also
+// served over https on :3443 for phone testing; the phone will warn about
+// the self-signed certificate once, then remember the choice.
+const certFile = path.join(here, "certs", "cert.pem");
+const keyFile = path.join(here, "certs", "key.pem");
+const HTTPS_PORT = Number(process.env.PP_HTTPS_PORT || 3443);
+
+if (fs.existsSync(certFile) && fs.existsSync(keyFile)) {
+  const httpsServer = https.createServer(
+    { cert: fs.readFileSync(certFile), key: fs.readFileSync(keyFile) },
+    app,
+  );
+  httpsServer.on("error", (err) => console.error(`HTTPS on :${HTTPS_PORT} failed:`, err.message));
+  httpsServer.listen(HTTPS_PORT, "0.0.0.0", () => {
+    console.log(`PotholePal HTTPS on https://localhost:${HTTPS_PORT} (for phones)`);
+  });
+} else {
+  console.log("HTTPS off: server/certs missing — run `npm run certs` first.");
+}

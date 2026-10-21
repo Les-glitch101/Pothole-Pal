@@ -1,15 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
-import {
-  SettingsIcon,
-  ChevronRight,
-  ClipboardIcon,
-  TrendingIcon,
-  TrophyIcon,
-  HelpIcon,
-  UserIcon,
-  ShieldIcon,
-} from "../lib/icons";
+import { ChevronRight, ClipboardIcon, TrophyIcon, UserIcon, ShieldIcon } from "../lib/icons";
 import { useFlow } from "../context/flow";
 
 const BADGES = [
@@ -19,13 +10,8 @@ const BADGES = [
   { label: "Top Reporter", color: "#eab308", Icon: TrophyIcon },
 ];
 
-const MENU = [
-  { label: "My Reports", Icon: ClipboardIcon, to: "/reports" },
-  { label: "My Impact", Icon: TrendingIcon, to: null },
-  { label: "Leaderboard", Icon: TrophyIcon, to: null },
-  { label: "Settings", Icon: SettingsIcon, to: null },
-  { label: "Help & Support", Icon: HelpIcon, to: null },
-];
+// Every row must lead somewhere: dead entries were removed on review.
+const MENU = [{ label: "My Reports", Icon: ClipboardIcon, to: "/reports" }];
 
 function Profile() {
   const navigate = useNavigate();
@@ -40,15 +26,8 @@ function Profile() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 pt-4">
+      <header className="flex items-center px-4 pt-4">
         <h1 className="text-2xl font-extrabold">Profile</h1>
-        <button
-          type="button"
-          aria-label="Settings"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ink hover:bg-slate-100"
-        >
-          <SettingsIcon className="h-5 w-5" />
-        </button>
       </header>
 
       {/* Identity */}
@@ -118,22 +97,6 @@ function Profile() {
           </button>
         ))}
       </div>
-
-      {/* Demo entry to the municipality portal (separate persona, no auth yet) */}
-      <button
-        type="button"
-        onClick={() => navigate("/staff")}
-        className="mx-4 mt-3 flex items-center gap-3 rounded-2xl bg-navy px-4 py-3 text-left text-white transition-opacity hover:opacity-90"
-      >
-        <ShieldIcon className="h-5 w-5 text-white/80" />
-        <span className="flex-1 text-sm font-bold">
-          Municipality portal
-          <span className="ml-2 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-            staff
-          </span>
-        </span>
-        <ChevronRight className="h-5 w-5 text-white/60" />
-      </button>
 
       <button
         type="button"

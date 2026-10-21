@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local HTTPS certificate for phone testing (never commit private keys)
+server/certs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -26,3 +29,4 @@ dist-ssr
 # Backend: secrets and uploaded photos
 .env
 server/uploads/
+/freebuff-sites-build/

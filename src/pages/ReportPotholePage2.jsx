@@ -1,51 +1,144 @@
-import { useMemo, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FlowHeader from "../components/FlowHeader";
 import LeafletMap from "../components/LeafletMap";
-import { SearchIcon, LocateIcon, LayersIcon, MapPinIcon, PencilIcon } from "../lib/icons";
-import { SEED_REPORTS } from "../lib/data";
+import { MapPinIcon, LocateIcon } from "../lib/icons";
 import { useFlow } from "../context/flow";
+import { SEED_REPORTS } from "../lib/data";
 
-function nearestArea(lat, lng) {
+/**
+ * Step 2: pick where the pothole is.
+ *
+ * - A draggable pin on a real map (tap the map or drag the pin).
+ * - "Use my current location" drops the pin on the device's GPS position.
+ * - The address string is always derived from the pin: a nearest-area
+ *   fallback instantly, replaced by Nominatim's reverse geocode when it
+ *   answers, so the label can no longer disagree with the pin.
+ * - The pin (or your location) must sit inside the Emfuleni District;
+ *   outside it, a message appears and Confirm Location stays off.
+ */
+
+// Rough bounding box of the Emfuleni District (Vereeniging, Three Rivers,
+// Duncanville, Arcon Park, Sonland Park, Peacehaven...).
+const DISTRICT = { minLat: -26.76, maxLat: -26.55, minLng: 27.8, maxLng: 28.03 };
+
+function isInsideDistrict(lat, lng) {
+  return lat >= DISTRICT.minLat && lat <= DISTRICT.maxLat && lng >= DISTRICT.minLng && lng <= DISTRICT.maxLng;
+}
+
+// Offline fallback label: the seed area whose marker sits closest to the pin.
+function nearestAreaName(lat, lng) {
   let best = null;
   let bestDist = Infinity;
   for (const r of SEED_REPORTS) {
-    const d = (r.lat - lat) ** 2 + (r.lng - lng) ** 2;
+    const dLat = (r.lat - lat) * 111;
+    const dLng = (r.lng - lng) * 111 * Math.cos((lat * Math.PI) / 180);
+    const d = dLat * dLat + dLng * dLng;
     if (d < bestDist) {
       bestDist = d;
       best = r;
     }
   }
-  return best ? best.area : "Vereeniging";
+  return best?.area || "Vereeniging";
+}
+
+function fallbackAddress(lat, lng) {
+  if (!isInsideDistrict(lat, lng)) {
+    return `Outside Emfuleni District (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+  }
+  return `${nearestAreaName(lat, lng)}, Emfuleni District, Gauteng`;
+}
+
+// Free OpenStreetMap reverse geocode; returns null when offline or on error.
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`,
+      { headers: { "Accept-Language": "en" } },
+    );
+    if (!res.ok) throw new Error("geocode failed");
+    const data = await res.json();
+    const a = data.address || {};
+    const parts = [
+      a.road || a.pedestrian,
+      a.suburb || a.neighbourhood || a.village || a.hamlet || a.locality,
+      a.city || a.town || a.municipality || a.county,
+      a.state,
+    ].filter(Boolean);
+    if (parts.length) return parts.join(", ");
+    return data.display_name || null;
+  } catch {
+    return null;
+  }
 }
 
 function ReportPotholePage2() {
   const navigate = useNavigate();
   const { draft, setDraft } = useFlow();
-  const [pinned, setPinned] = useState({ lat: draft.lat, lng: draft.lng });
+
+  const [pin, setPin] = useState({ lat: draft.lat, lng: draft.lng });
   const [address, setAddress] = useState(draft.address);
-  const [search, setSearch] = useState("");
-  const searchRef = useMemo(() => ({ current: null }), []);
+  const [looking, setLooking] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [geoMsg, setGeoMsg] = useState(null);
 
-  const onPinMove = (ll) => {
-    setPinned({ lat: ll.lat, lng: ll.lng });
-    setAddress(`${nearestArea(ll.lat, ll.lng)}, Gauteng, South Africa`);
-  };
+  const pinRef = useRef(pin);
+  const timerRef = useRef(null);
+  const requestRef = useRef(0);
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) return;
+  const moveTo = useCallback((lat, lng) => {
+    pinRef.current = { lat, lng };
+    setPin({ lat, lng });
+
+    // Label immediately so it always matches the pin, then upgrade it with
+    // the reverse geocode when (if) that answers.
+    const fallback = fallbackAddress(lat, lng);
+    setAddress(fallback);
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const myRequest = ++requestRef.current;
+    setLooking(true);
+    timerRef.current = setTimeout(async () => {
+      const real = await reverseGeocode(lat, lng);
+      const stillCurrent = requestRef.current === myRequest;
+      if (stillCurrent) {
+        if (real && pinRef.current && pinRef.current.lat === lat && pinRef.current.lng === lng) {
+          setAddress(real);
+        }
+        setLooking(false);
+      }
+    }, 450);
+  }, []);
+
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGeoMsg("Location is not available in this browser. Drag the pin instead.");
+      return;
+    }
+    setLocating(true);
+    setGeoMsg(null);
     navigator.geolocation.getCurrentPosition(
-      (pos) => onPinMove({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {
-        /* permission denied or unavailable — keep current pin */
+      (pos) => {
+        setLocating(false);
+        moveTo(pos.coords.latitude, pos.coords.longitude);
       },
-      { timeout: 5000 },
+      (err) => {
+        setLocating(false);
+        setGeoMsg(
+          err?.code === 1
+            ? "Location permission denied. Drag the pin to the pothole instead."
+            : "Could not get your location. Drag the pin to the pothole instead.",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
     );
-  };
+  }, [moveTo]);
+
+  const outside = !isInsideDistrict(pin.lat, pin.lng);
 
   const confirm = () => {
-    const value = search.trim() || address;
-    setDraft({ lat: pinned.lat, lng: pinned.lng, address: value });
+    if (outside) return;
+    setDraft({ lat: pin.lat, lng: pin.lng, address });
     navigate("/report3");
   };
 
@@ -53,81 +146,64 @@ function ReportPotholePage2() {
     <div className="flex min-h-screen flex-col bg-white pb-8">
       <FlowHeader step={2} onBack={() => navigate("/report1")} />
 
-      <div className="mt-5 px-5">
-        <h2 className="text-lg font-extrabold">Where is the pothole?</h2>
-        <p className="mt-1 text-sm text-muted">
-          Drag the pin to the exact location or search for an address.
-        </p>
-
-        {/* Address search */}
-        <div className="mt-4 flex items-center gap-2 rounded-2xl border border-line bg-white px-3 py-2.5 shadow-sm">
-          <SearchIcon className="h-5 w-5 shrink-0 text-muted" />
-          <input
-            ref={searchRef}
-            type="text"
-            placeholder="Search for an address"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-          />
+      {/* District gate: appears as soon as the pin (or your location) is outside */}
+      {outside && (
+        <div
+          role="alert"
+          className="mx-5 mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 shadow-sm"
+        >
+          <p className="text-sm font-extrabold text-amber-800">Outside Emfuleni District</p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-800/90">
+            We don't deal with issues outside of the Emfuleni District. Move the pin inside the
+            district to continue.
+          </p>
         </div>
+      )}
+
+      <div className="mt-4 px-5">
+        <h2 className="text-lg font-extrabold">Confirm the location</h2>
+        <p className="mt-1 text-sm text-muted">Drag the map so the pin sits on the pothole.</p>
       </div>
 
-      {/* Map with draggable pin */}
-      <div className="relative mx-4 mt-4 h-72 overflow-hidden rounded-3xl border border-line shadow-sm">
+      {/* Map with a draggable pin */}
+      <div className="mx-5 mt-3 h-[340px] overflow-hidden rounded-3xl border border-line shadow-sm">
         <LeafletMap
           dragPin
-          onPinMove={onPinMove}
-          center={[pinned.lat, pinned.lng]}
+          center={pin}
           zoom={15}
           className="h-full"
+          onPinMove={(ll) => moveTo(ll.lat, ll.lng)}
+          onMapClick={(ll) => moveTo(ll.lat, ll.lng)}
         />
+      </div>
 
-        {/* Map controls */}
-        <div className="absolute right-3 top-3 z-[600] flex flex-col gap-2">
-          <button
-            type="button"
-            aria-label="Use my location"
-            onClick={useMyLocation}
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-ink shadow-md ring-1 ring-slate-200 transition-colors hover:text-primary"
-          >
-            <LocateIcon className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            aria-label="Map layers"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-ink shadow-md ring-1 ring-slate-200 transition-colors hover:text-primary"
-          >
-            <LayersIcon className="h-5 w-5" />
-          </button>
+      {/* Address resolved from the pin */}
+      <div className="mx-5 mt-3 flex items-start gap-2 rounded-2xl border border-line bg-white p-3.5 shadow-sm">
+        <MapPinIcon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-muted">Location</p>
+          <p className="break-words text-sm font-bold text-ink">{address}</p>
+          {looking && <p className="mt-0.5 text-xs text-muted">Checking the address...</p>}
+          {geoMsg && <p className="mt-0.5 text-xs font-semibold text-amber-600">{geoMsg}</p>}
         </div>
       </div>
 
-      {/* Address card */}
-      <div className="mx-4 mt-4 flex items-center gap-3 rounded-2xl border border-line bg-white p-3.5 shadow-sm">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-          <MapPinIcon className="h-6 w-6" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted">Pothole location</p>
-          <p className="truncate text-[15px] font-bold">{search.trim() || address}</p>
-        </div>
+      <div className="mt-3 space-y-3 px-5">
         <button
           type="button"
-          aria-label="Edit address"
-          onClick={() => searchRef.current?.focus()}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary hover:bg-primary-soft"
+          onClick={requestLocation}
+          disabled={locating}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-line bg-white py-3 text-sm font-bold text-ink transition-colors hover:bg-slate-50 disabled:opacity-60"
         >
-          <PencilIcon className="h-4 w-4" />
+          <LocateIcon className="h-4 w-4 text-primary" />
+          {locating ? "Finding you..." : "Use my current location"}
         </button>
-      </div>
 
-      {/* Confirm */}
-      <div className="mt-5 px-5">
         <button
           type="button"
           onClick={confirm}
-          className="w-full rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-lg shadow-primary/25 transition-colors hover:bg-primary-dark"
+          disabled={outside}
+          className="w-full rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-lg shadow-primary/25 transition-colors hover:bg-primary-dark disabled:opacity-50"
         >
           Confirm Location
         </button>

@@ -20,6 +20,7 @@ const USERS = [
   { key: "thabo", name: "Thabo Nkosi", email: "thabo@potholepal.test", password: "resident123", role: "resident", points: 320, level: 1 },
   { key: "sarah", name: "Sarah Patel", email: "sarah@potholepal.test", password: "resident123", role: "resident", points: 480, level: 2 },
   { key: "staff", name: "P. Mokoena", email: "staff@potholepal.test", password: "staff123", role: "staff", points: 0, level: 1 },
+  { key: "nkosi", name: "Nkosi", email: "nkosi@municipalstaff.com", password: "staff123", role: "staff", points: 0, level: 1 },
 ];
 
 const REPORTER_KEY_BY_ID = { 1018: "john", 1019: "sarah", 1020: "thabo", 1021: "john", 1022: "sarah", 1023: "thabo", 1024: "john" };
@@ -202,7 +203,7 @@ if (syntheticCount.recordset[0].n !== SYN_COUNT) {
 
     stmts.push(
       `INSERT INTO dbo.reports (${COLS}) VALUES (` +
-      [n, reporterId, lat.toFixed(6), lng.toFixed(6), q("Vereeniging, Gauteng, South Africa"), q(area.area),
+      [n, reporterId, lat.toFixed(6), lng.toFixed(6), q(`${area.area}, Emphuleni District, Gauteng`), q(area.area),
         q(pick(SYN_ISSUE)), q(fields.size), q(fields.depth), q(fields.traffic), q(fields.damage),
         q(pick(SYN_DESC)), q(status), q(priority), score, q("/uploads/seed-pothole.svg"),
         iso(createdAt), iso(createdAt)].join(", ") + ")",

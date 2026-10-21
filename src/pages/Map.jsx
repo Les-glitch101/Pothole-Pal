@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
 import LeafletMap from "../components/LeafletMap";
-import { SearchIcon, SlidersIcon, ChevronRight } from "../lib/icons";
+import { SearchIcon, ChevronRight } from "../lib/icons";
 import { FILTERS, STATUS } from "../lib/data";
 import { useFlow } from "../context/flow";
 
@@ -16,28 +16,22 @@ function MapScreen() {
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
   const { reports } = useFlow();
+  const navigate = useNavigate();
 
   const all = reports;
   const q = query.trim().toLowerCase();
   const byQuery = q ? all.filter((r) => r.area.toLowerCase().includes(q)) : all;
   const list = filter === "All" ? byQuery : byQuery.filter((r) => STATUS[r.status].label === filter);
 
-  const markers = list.map((r) => ({ lat: r.lat, lng: r.lng, color: STATUS[r.status].color }));
+  const markers = list.map((r) => ({ id: r.id, lat: r.lat, lng: r.lng, color: STATUS[r.status].color }));
   const featured = list[0];
   const chip = featured ? severityChip(featured.severityNote) : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
       {/* Title */}
-      <header className="flex items-center justify-between px-4 pt-4">
+      <header className="flex items-center px-4 pt-4">
         <h1 className="text-2xl font-extrabold">Map</h1>
-        <button
-          type="button"
-          aria-label="Filters"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ink hover:bg-slate-100"
-        >
-          <SlidersIcon className="h-5 w-5" />
-        </button>
       </header>
 
       {/* Search */}
@@ -70,7 +64,12 @@ function MapScreen() {
 
       {/* Map + featured card */}
       <div className="relative mx-4 mt-3 h-[440px] overflow-hidden rounded-3xl border border-line shadow-sm">
-        <LeafletMap markers={markers} className="h-full" zoom={14} />
+        <LeafletMap
+          markers={markers}
+          className="h-full"
+          zoom={14}
+          onMarkerSelect={(m) => navigate(`/report-details/${m.id}`)}
+        />
 
         {featured ? (
           <Link

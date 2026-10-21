@@ -15,6 +15,7 @@ const pool = await db();
 // Children first: notifications and history reference reports, reports and
 // history reference users.
 await pool.request().batch(`
+  DELETE FROM dbo.password_resets;
   DELETE FROM dbo.notifications;
   DELETE FROM dbo.report_status_history;
   DELETE FROM dbo.reports;

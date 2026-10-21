@@ -2,16 +2,25 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useFlow } from "../context/flow";
 import { api } from "../lib/api";
+import { EyeIcon, EyeOffIcon } from "../lib/icons";
 
+/**
+ * One sign-in screen for both sides of the system. The role comes back from
+ * the database with the session, so a staff account (staff@potholepal.test or
+ * nkosi@municipalstaff.com) continues to the municipal dashboard and a
+ * resident continues to the app.
+ */
 function Login() {
-  const { resident, signIn } = useFlow();
+  const { resident, staff, signIn } = useFlow();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (resident) return <Navigate to="/" replace />;
+  if (staff) return <Navigate to="/staff" replace />;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -21,14 +30,11 @@ function Login() {
       const session = await api("/auth/login", {
         method: "POST",
         body: { email, password },
-        role: "resident",
+        noRedirect: true,
       });
-      if (session.user.role === "staff") {
-        setError("That is a staff account. Sign in through the municipality portal instead.");
-        return;
-      }
-      signIn("resident", session);
-      navigate("/", { replace: true });
+      const isStaff = session.user.role === "staff";
+      signIn(isStaff ? "staff" : "resident", session);
+      navigate(isStaff ? "/staff" : "/", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -59,19 +65,38 @@ function Login() {
           className="mt-1.5 w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none focus:border-primary"
         />
 
-        <label className="mt-5 block text-xs font-bold text-muted" htmlFor="password">
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Your password"
-          className="mt-1.5 w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none focus:border-primary"
-        />
+        <div className="mt-5 flex items-center justify-between">
+          <label className="text-xs font-bold text-muted" htmlFor="password">
+            Password
+          </label>
+          <button
+            type="button"
+            onClick={() => navigate("/forgot")}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            Forgot password?
+          </button>
+        </div>
+        <div className="relative mt-1.5">
+          <input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Your password"
+            className="w-full rounded-2xl border border-line px-4 py-3 pr-11 text-sm outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((s) => !s)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition-colors hover:text-ink"
+          >
+            {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+          </button>
+        </div>
 
         {error && (
           <p className="mt-4 rounded-xl bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600">
@@ -88,17 +113,16 @@ function Login() {
         </button>
       </form>
 
-      <div className="mt-6 rounded-2xl border border-line bg-slate-50 p-4 text-xs leading-relaxed text-muted">
-        <p className="font-bold text-ink">Demo resident account</p>
-        <p className="mt-1 font-mono">alex@potholepal.test / resident123</p>
+      <p className="mt-5 text-center text-sm text-muted">
+        New here?{" "}
         <button
           type="button"
-          onClick={() => navigate("/staff")}
-          className="mt-3 font-bold text-primary hover:underline"
+          onClick={() => navigate("/register")}
+          className="font-bold text-primary hover:underline"
         >
-          Staff member? Use the municipality portal
+          Create an account
         </button>
-      </div>
+      </p>
 
       <div className="pb-8" />
     </div>

@@ -51,7 +51,11 @@ function ReportPotholePage4() {
     setEvidenceDone(false);
     try {
       const report = await submitDraft();
-      navigate(`/report-details/${report.id}`, { replace: true });
+      // Put the reports list directly behind the new report's details page, so
+      // pressing back there returns to My Reports instead of the emptied
+      // submit flow. Other ways of opening this page keep their own history.
+      navigate("/reports", { replace: true });
+      navigate(`/report-details/${report.id}`);
     } catch (err) {
       setSubmitError(err.message || "Could not submit the report. Is the server running?");
       if (err.code === "duplicate_report") setDuplicateRef(err.ref);

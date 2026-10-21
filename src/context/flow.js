@@ -14,7 +14,7 @@ export const EMPTY_DRAFT = {
   photo: null,
   lat: -26.6736,
   lng: 27.9319,
-  address: "Vereeniging, Gauteng, South Africa",
+  address: "Vereeniging, Emphuleni District, Gauteng",
   issueType: "Pothole",
   description: "",
   size: "Medium",

@@ -11,7 +11,8 @@ import MyReports from "./pages/MyReports";
 import ReportDetails from "./pages/ReportDetails";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
-import StaffLogin from "./pages/StaffLogin";
+import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
 import ReportPotholePage1 from "./pages/ReportPotholePage1";
 import ReportPotholePage2 from "./pages/ReportPotholePage2";
 import ReportPotholePage3 from "./pages/ReportPotholePage3";
@@ -31,7 +32,9 @@ function RequireAnySession({ children }) {
 
 function StaffGate() {
   const { staff } = useFlow();
-  return staff?.user?.role === "staff" ? <Dashboard /> : <StaffLogin />;
+  // No separate portal login any more: without a staff session this sends you
+  // to the one sign-in page, which routes by role.
+  return staff?.user?.role === "staff" ? <Dashboard /> : <Navigate to="/login" replace />;
 }
 
 function App() {
@@ -119,6 +122,8 @@ function App() {
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-white shadow-[0_0_40px_rgba(15,23,42,0.06)]">
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot" element={<ForgotPassword />} />
           <Route path="/staff" element={<StaffGate />} />
           <Route path="/dashboard" element={<Navigate to="/staff" replace />} />
           <Route path="/" element={<RequireResident><Home /></RequireResident>} />
