@@ -83,6 +83,16 @@ CREATE TABLE dbo.notifications (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_notifications_user' AND object_id = OBJECT_ID('dbo.notifications'))
     CREATE INDEX IX_notifications_user ON dbo.notifications (user_id, created_at DESC);
 
+-- Field teams (Team A - Team H): accounts live in dbo.users with role 'team',
+-- and this table carries each team's live assignment state for the portals.
+IF OBJECT_ID('dbo.teams', 'U') IS NULL
+CREATE TABLE dbo.teams (
+    user_id    INT PRIMARY KEY REFERENCES dbo.users (id),
+    status     NVARCHAR(20) NOT NULL CONSTRAINT DF_teams_status DEFAULT ('available'),
+    report_id  INT NULL REFERENCES dbo.reports (id),
+    updated_at DATETIME2 NOT NULL CONSTRAINT DF_teams_updated DEFAULT (SYSUTCDATETIME())
+);
+
 -- One active password-reset code per user (see /api/v1/auth/forgot).
 IF OBJECT_ID('dbo.password_resets', 'U') IS NULL
 CREATE TABLE dbo.password_resets (

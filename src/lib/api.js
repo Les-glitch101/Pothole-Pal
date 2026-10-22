@@ -2,7 +2,7 @@
 // one key per role, so the resident app and the staff portal can be signed in
 // at the same time in the same browser while two different browsers stay
 // completely independent.
-const KEYS = { resident: "pp.session.resident", staff: "pp.session.staff" };
+const KEYS = { resident: "pp.session.resident", staff: "pp.session.staff", team: "pp.session.team" };
 
 export function getSession(role) {
   try {
@@ -49,7 +49,7 @@ export async function api(path, { method = "GET", body, form, role = "resident",
   if (res.status === 401) {
     clearSession(role);
     if (!noRedirect) {
-      window.location.assign(role === "staff" ? "/staff" : "/login");
+      window.location.assign(role === "staff" ? "/staff" : role === "team" ? "/team" : "/login");
       throw new Error("Please sign in.");
     }
     const body401 = await res.json().catch(() => null);

@@ -5,13 +5,13 @@ import { api } from "../lib/api";
 import { EyeIcon, EyeOffIcon } from "../lib/icons";
 
 /**
- * One sign-in screen for both sides of the system. The role comes back from
- * the database with the session, so a staff account (staff@potholepal.test or
- * nkosi@municipalstaff.com) continues to the municipal dashboard and a
- * resident continues to the app.
+ * One sign-in screen for every side of the system. The role comes back from
+ * the database with the session: staff accounts open the Staff Portal, field
+ * teams (teama@staff.com - teamh@staff.com) open the Team Portal, and
+ * residents continue to the app.
  */
 function Login() {
-  const { resident, staff, signIn } = useFlow();
+  const { resident, staff, team, signIn } = useFlow();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,6 +21,7 @@ function Login() {
 
   if (resident) return <Navigate to="/" replace />;
   if (staff) return <Navigate to="/staff" replace />;
+  if (team) return <Navigate to="/team" replace />;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -32,9 +33,10 @@ function Login() {
         body: { email, password },
         noRedirect: true,
       });
-      const isStaff = session.user.role === "staff";
-      signIn(isStaff ? "staff" : "resident", session);
-      navigate(isStaff ? "/staff" : "/", { replace: true });
+      const lane =
+        session.user.role === "staff" ? "staff" : session.user.role === "team" ? "team" : "resident";
+      signIn(lane, session);
+      navigate(lane === "staff" ? "/staff" : lane === "team" ? "/team" : "/", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

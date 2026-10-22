@@ -5,6 +5,34 @@ import { SEED_REPORTS } from "../../src/lib/data.js";
 
 export const STAGE_ORDER = ["new", "review", "scheduled", "repairing", "fixed"];
 
+// Resident ranks: points buy the title and the level together so both always
+// tell the same story. The stored level column is kept in step whenever a
+// report reaches fixed and the +50 points land.
+export const RANKS = [
+  { min: 0, level: 1, title: "Newcomer" },
+  { min: 300, level: 2, title: "Road Spotter" },
+  { min: 700, level: 3, title: "Road Warrior" },
+  { min: 1500, level: 4, title: "Road Guardian" },
+  { min: 3000, level: 5, title: "Road Legend" },
+];
+
+export function rankOf(points) {
+  let current = RANKS[0];
+  for (const rank of RANKS) {
+    if (points >= rank.min) current = rank;
+  }
+  return current;
+}
+
+// Badges are earned by real counts, never shown as decoration. The hints are
+// what the profile page tells the resident is still missing.
+export const BADGES = [
+  { key: "first_report", label: "First Report", hint: "Submit your first report", test: (s) => s.reports >= 1 },
+  { key: "veteran", label: "Veteran Reporter", hint: "Submit 5 reports", test: (s) => s.reports >= 5 },
+  { key: "community_hero", label: "Community Hero", hint: "Get 3 reports fixed", test: (s) => s.fixed >= 3 },
+  { key: "top_reporter", label: "Top Reporter", hint: "Reach 1,000 points", test: (s) => s.points >= 1000 },
+];
+
 export const CENTROID = { lat: -26.6736, lng: 27.9319 };
 
 export const AREAS = SEED_REPORTS.map((r) => ({ area: r.area, lat: r.lat, lng: r.lng }));

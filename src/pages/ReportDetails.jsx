@@ -18,10 +18,9 @@ const NEXT_STEP = {
 function ReportDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { reports, resident, staff, refresh } = useFlow();
+  const { reports, resident, staff } = useFlow();
   const [following, setFollowing] = useState(false);
   const [fetched, setFetched] = useState(null);
-  const [acting, setActing] = useState(false);
 
   const inList = reports.find((r) => String(r.id) === String(id));
 
@@ -148,7 +147,7 @@ function ReportDetails() {
           <p className="text-sm font-bold">{report.reporter || "Unknown"}</p>
         </div>
         <span className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-bold text-violet-700">
-          Road Warrior
+          {report.reporterTitle || "Newcomer"}
         </span>
       </div>
 
@@ -200,11 +199,12 @@ function ReportDetails() {
         </ol>
       </div>
 
-      {/* Staff actions (shown only in the staff portal session) */}
+      {/* Staff view (staff portal session): read-only. The progress is moved
+          by the field teams from the Team Portal, the office only watches. */}
       {staff?.user?.role === "staff" && (
         <div className="mx-4 mt-4 rounded-3xl bg-navy p-4 text-white">
           <div className="flex items-center justify-between">
-            <h3 className="text-[15px] font-extrabold">Staff actions</h3>
+            <h3 className="text-[15px] font-extrabold">Report info</h3>
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide">
               {report.priority}
             </span>
@@ -213,34 +213,11 @@ function ReportDetails() {
             Score {report.score} · {report.duplicateCount} duplicate
             {report.duplicateCount === 1 ? "" : "s"} reported
           </p>
-          {NEXT_STEP[report.status] ? (
-            <button
-              type="button"
-              disabled={acting}
-              onClick={async () => {
-                setActing(true);
-                try {
-                  await api(`/reports/${report.id}`, {
-                    method: "PATCH",
-                    body: { status: NEXT_STEP[report.status].status },
-                    role: "staff",
-                  });
-                  await refresh();
-                } catch (err) {
-                  console.error("status change failed:", err);
-                } finally {
-                  setActing(false);
-                }
-              }}
-              className="mt-3 w-full rounded-2xl bg-primary py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-60"
-            >
-              {acting ? "Saving..." : `Advance: ${NEXT_STEP[report.status].label}`}
-            </button>
-          ) : (
-            <p className="mt-3 rounded-2xl bg-white/10 px-3 py-2.5 text-center text-sm font-semibold text-white/70">
-              Repair complete. This report is closed.
-            </p>
-          )}
+          <p className="mt-3 rounded-2xl bg-white/10 px-3 py-2.5 text-center text-sm font-semibold text-white/70">
+            {NEXT_STEP[report.status]
+              ? "Progress is updated by the field team working on this report."
+              : "Repair complete. This report is closed."}
+          </p>
         </div>
       )}
     </div>

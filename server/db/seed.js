@@ -9,7 +9,7 @@ import bcrypt from "bcryptjs";
 import sql from "mssql";
 import { db } from "./db.js";
 import { SEED_REPORTS, NOTIFICATIONS, POTHOLE_IMG } from "../../src/lib/data.js";
-import { STAGE_ORDER, AREAS, scoreReport } from "../lib/domain.js";
+import { STAGE_ORDER, AREAS, scoreReport, rankOf } from "../lib/domain.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(here, "..", "uploads");
@@ -21,17 +21,31 @@ const USERS = [
   { key: "sarah", name: "Sarah Patel", email: "sarah@potholepal.test", password: "resident123", role: "resident", points: 480, level: 2 },
   { key: "staff", name: "P. Mokoena", email: "staff@potholepal.test", password: "staff123", role: "staff", points: 0, level: 1 },
   { key: "nkosi", name: "Nkosi", email: "nkosi@municipalstaff.com", password: "staff123", role: "staff", points: 0, level: 1 },
+  // Field teams: TeamA@staff.com - TeamH@staff.com, password team123. The
+  // role 'team' opens the team portal, where crews claim reports and move
+  // their progress. Emails are stored lowercase; login lowercases input too.
+  ..."ABCDEFGH".split("").map((letter) => ({
+    key: `team${letter.toLowerCase()}`,
+    name: `Team ${letter}`,
+    email: `team${letter.toLowerCase()}@staff.com`,
+    password: "team123",
+    role: "team",
+    points: 0,
+    level: 1,
+  })),
 ];
 
 const REPORTER_KEY_BY_ID = { 1018: "john", 1019: "sarah", 1020: "thabo", 1021: "john", 1022: "sarah", 1023: "thabo", 1024: "john" };
-const CREATED_HOURS_AGO = { 1018: 6, 1019: 96, 1020: 3, 1021: 48, 1022: 30, 1023: 5, 1024: 2 };
+const CREATED_HOURS_AGO = { 1018: 96, 1019: 48, 1020: 30, 1021: 6, 1022: 5, 1023: 3, 1024: 2 };
 
 // The six notifications from src/lib/data.js, flattened in order.
 const NOTIF_TYPE_BY_ICON = { check: "verified", wrench: "scheduled", award: "points", message: "comment", alert: "alert" };
-const NOTIF_HOURS_AGO = [2, 4, 6, 11, 70, 110];
+const NOTIF_HOURS_AGO = [2, 4, 6, 11, 40, 44];
 const NOTIF_REPORT_ID = [1024, 1024, 1019, null, 1019, null];
 
 const SYN_COUNT = 90;
+// Spread the synthetic reports over six months so the staff Analytics tab
+// has real monthly history to plot instead of a single crowded month.
 const SYN_ISSUE = ["Pothole", "Pothole", "Pothole", "Pothole", "Damaged shoulder", "Cracked surface"];
 const SYN_SIZE = ["Small", "Medium", "Medium", "Large"];
 const SYN_DEPTH = ["Shallow", "Moderate", "Moderate", "Deep"];
@@ -116,7 +130,8 @@ for (const u of USERS) {
     password_hash: hash,
     role: u.role,
     points: u.points,
-    level: u.level,
+    // Level always follows the rank ladder, never a hand-typed number.
+    level: rankOf(u.points).level,
   }, { output: "INSERTED.id" });
   userIdByEmail.set(u.email, row.id);
 }
@@ -188,7 +203,11 @@ if (syntheticCount.recordset[0].n !== SYN_COUNT) {
 
   for (let n = 1; n <= SYN_COUNT; n++) {
     const area = pick(AREAS);
-    const createdAt = new Date(Date.now() - Math.random() * 30 * 24 * 3600 * 1000);
+    // Ages fall as the report number climbs: #1 is about six months old and
+    // #90 about a week out, so "first to most recent" reads the same whether
+    // you look at the number or the date.
+    const ageDays = 175 - ((n - 1) / (SYN_COUNT - 1)) * 167;
+    const createdAt = new Date(Date.now() - ageDays * 24 * 3600 * 1000);
     const status = weightedStatus();
     const fields = {
       size: pick(SYN_SIZE),
@@ -239,6 +258,30 @@ if (notifCount.recordset[0].n === 0) {
       i++;
       notifsSeeded++;
     }
+  }
+}
+
+// ---------------------------------------------------------------- teams
+// Live assignment state for the demo: Team A is on site at a repairing
+// report, Team B is dispatched to a scheduled one, the rest are available.
+const teamCount = await pool.request().query("SELECT COUNT(*) AS n FROM dbo.teams");
+if (teamCount.recordset[0].n === 0) {
+  const onsite = await pool.request().query("SELECT TOP 1 id, ref FROM dbo.reports WHERE status = 'repairing' ORDER BY id");
+  const dispatched = await pool.request().query("SELECT TOP 1 id, ref FROM dbo.reports WHERE status = 'scheduled' ORDER BY id");
+  const states = [
+    ["teama", onsite.recordset[0]],
+    ["teamb", dispatched.recordset[0]],
+  ];
+  for (const [key, report] of states) {
+    if (!report) continue;
+    await insertRow(pool.request(), "dbo.teams", {
+      user_id: idOf(key),
+      status: key === "teama" ? "onsite" : "dispatched",
+      report_id: report.id,
+    });
+  }
+  if (states.some(([, report]) => report)) {
+    console.log(`team demo state seeded (Team A on site at ${onsite.recordset[0]?.ref || "-"}, Team B dispatched to ${dispatched.recordset[0]?.ref || "-"})`);
   }
 }
 

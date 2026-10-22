@@ -163,7 +163,7 @@ doc.add_paragraph(
 )
 doc.add_paragraph(
     "What we use it for: all stored data. The schema is server/db/schema.sql, which "
-    "creates five tables."
+    "creates six tables."
 )
 table(
     ["Table", "Holds"],
@@ -172,6 +172,7 @@ table(
         ["reports", "One row per pothole: coordinates, answers, status, priority score, photo"],
         ["report_status_history", "One row each time a report's status changes, used for the progress timeline"],
         ["notifications", "Messages shown on the resident's notifications screen"],
+        ["teams", "Each field crew's live assignment: available, dispatched, or on site at a report"],
         ["password_resets", "The hashed reset code for the forgot-password flow, with its expiry"],
     ],
     [2.0, 4.2],
@@ -292,14 +293,20 @@ doc.add_paragraph(
     "obvious break?"
 )
 doc.add_paragraph(
-    "What ours covers: server/smoke-test.sh runs 26 checks against the live server at "
+    "What ours covers: server/smoke-test.sh runs 48 checks against the live server at "
     "http://localhost:3001. They cover signing in as a resident and as staff, a wrong "
     "password, the signed-out 401, the reports list and report ownership, the dashboard "
     "counts, submitting a report (status code, reference number, priority score, "
     "ownership), the duplicate guard answering 409 with the existing reference, the rule "
     "that only staff may change a status, the notification a status change creates, the "
     "staff queue order, and attaching a photo as evidence instead of creating a second "
-    "work item."
+    "work item. The team checks cover a team sign-in, a resident being refused the team "
+    "endpoint, a crew claiming a report as on site, the staff side seeing that claim, a "
+    "second crew being refused the same report with 409, the crew advancing the progress, "
+    "a crew on site at a different report being refused with 403, standing back down to "
+    "available, an available crew being refused progress changes, and the six-month "
+    "monthly history. The rank checks cover the +50 points payout, the rank title and "
+    "level following the ladder, the badge rules, and the leaderboard order."
 )
 doc.add_paragraph(
     "How it reports: one PASS or FAIL line per check, a final ALL SMOKE TESTS PASSED line, "
@@ -327,19 +334,22 @@ table(
         ["POST /api/v1/auth/register", "Anyone", "Creates a resident account (staff email domain refused)"],
         ["POST /api/v1/auth/login", "Anyone", "Signs in and returns a token plus the user"],
         ["POST /api/v1/auth/logout", "Signed in", "Ends the session"],
-        ["GET /api/v1/auth/me", "Signed in", "Returns the signed-in account"],
+        ["GET /api/v1/auth/me", "Signed in", "The account with its rank title, level, live stats and badge scores"],
+        ["GET /api/v1/leaderboard", "Signed in", "Top ten residents by points plus your own position"],
         ["POST /api/v1/auth/forgot", "Anyone", "Creates a six-digit reset code for that email"],
         ["POST /api/v1/auth/reset", "Anyone", "Exchanges the code for a new password and a fresh session"],
         ["GET /api/v1/reports", "Signed in", "Lists every report, each flagged with whether it is yours"],
         ["POST /api/v1/reports", "Resident", "Submits a report with its photo; 409 if one already sits within 50 m"],
         ["GET /api/v1/reports/:id", "Signed in", "Returns one report with its progress timeline"],
-        ["PATCH /api/v1/reports/:id", "Staff only", "Changes a report's status; residents get a 403"],
+        ["PATCH /api/v1/reports/:id", "Staff or team", "Changes a report's status; residents get 403, teams only while on site at that report"],
         ["POST /api/v1/reports/:id/evidence", "Resident", "Attaches a supporting photo to an existing report"],
         ["GET /api/v1/stats", "Resident", "The numbers on the resident home screen"],
         ["GET /api/v1/notifications", "Signed in", "The notification list, grouped by day"],
         ["POST /api/v1/notifications/:id/read", "Signed in", "Marks one notification as read"],
-        ["GET /api/v1/staff/queue", "Staff only", "The work queue, sorted by priority score"],
-        ["GET /api/v1/staff/stats", "Staff only", "Dashboard totals plus the heatmap points"],
+        ["GET /api/v1/staff/queue", "Staff or team", "The work queue, sorted by priority score"],
+        ["GET /api/v1/staff/stats", "Staff or team", "Dashboard totals, heatmap points, monthly analytics"],
+        ["GET /api/v1/teams", "Staff or team", "Every field team with its live status (available, dispatched, on site)"],
+        ["POST /api/v1/teams/status", "Team only", "A crew claims a report (on site or dispatched) or stands down; one crew per report"],
     ],
     [2.5, 1.0, 2.7],
 )
@@ -461,8 +471,7 @@ numbered(
         "Start the server first (guide 3.1 or the server window you already have open).",
         "For exact-count checks to pass, reset the demo data first: cd server && npm run db:reset.",
         "Open Git Bash in the project root (the script is a bash script).",
-        "bash server/smoke-test.sh",
-        "Read the output:26 PASS lines and the final ALL SMOKE TESTS PASSED. A FAIL line prints the value the server returned and the value that was expected.",
+        "bash server/smoke-test.sh",        "Read the output: 48 PASS lines and the final ALL SMOKE TESTS PASSED. A FAIL line prints the value the server returned and the value that was expected.",
         "Run npm run db:reset once more if you want the database pristine again afterwards; the test itself creates a report (#1025) and attaches evidence to it.",
     ]
 )
@@ -600,14 +609,16 @@ table(
     ["Account", "Password", "Opens"],
     [
         ["alex@potholepal.test", "resident123", "The resident app, with reports already in My Reports"],
-        ["staff@potholepal.test", "staff123", "The municipal dashboard"],
-        ["nkosi@municipalstaff.com", "staff123", "The municipal dashboard"],
+        ["staff@potholepal.test", "staff123", "The Staff Portal (municipal dashboard)"],
+        ["nkosi@municipalstaff.com", "staff123", "The Staff Portal (municipal dashboard)"],
+        ["teama@staff.com through teamh@staff.com", "team123", "The Team Portal for crews A to H"],
     ],
     [2.4, 1.4, 2.4],
 )
 doc.add_paragraph(
-    "One page handles both sides: the role comes from the account, so a staff sign-in goes "
-    "to the dashboard and everything else goes to the resident app."
+    "One page handles every side: the role comes from the account, so a staff sign-in "
+    "opens the Staff Portal, a team sign-in opens that crew's portal (Team A Portal, "
+    "Team B Portal, and so on), and everything else goes to the resident app."
 )
 doc.add_paragraph(
     "New residents can register in the app itself. The municipalstaff.com domain is "

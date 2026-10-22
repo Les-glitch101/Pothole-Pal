@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import LeafletMap from "../components/LeafletMap";
 import {
   MenuIcon,
-  BellIcon,
+  LogoutIcon,
   AlertIcon,
   CheckCircleIcon,
   TrendingIcon,
   MapPinIcon,
+  NavigationIcon,
   ChevronRight,
 } from "../lib/icons";
 import { STATUS } from "../lib/data";
@@ -16,11 +17,13 @@ import { api } from "../lib/api";
 
 const TABS = ["Overview", "Reports", "Teams", "Analytics"];
 
-const CREWS = [
-  { name: "Team A — Three Rivers", area: "3 active jobs", status: "On site" },
-  { name: "Team B — Sonland Park", area: "1 active job", status: "Dispatched" },
-  { name: "Team C — Duncanville", area: "0 active jobs", status: "Available" },
-];
+const STATUS_KEYS = ["new", "review", "scheduled", "repairing", "fixed"];
+
+const TEAM_TONES = {
+  onsite: { bg: "#dbe4ff", color: "#1d5beb", label: "On site" },
+  dispatched: { bg: "#fef3c7", color: "#d97706", label: "Dispatched" },
+  available: { bg: "#dcfce7", color: "#16a34a", label: "Available" },
+};
 
 function severityTone(sev) {
   if (sev === "High" || sev === "Severe") return { bg: "#fee2e2", color: "#dc2626" };
@@ -32,18 +35,46 @@ function Dashboard() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("Overview");
   const [stats, setStats] = useState(null);
-  const { reports, signOut } = useFlow();
+  const [teams, setTeams] = useState([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { reports, staff, signOut } = useFlow();
 
-  useEffect(() => {
+  const loadStats = useCallback(() => {
     api("/staff/stats", { role: "staff" })
       .then(setStats)
       .catch(() => setStats(null));
   }, []);
 
-  // The queue is the same live list the resident app sees, ordered by the
-  // priority score so triage starts with the worst reports.
+  const loadTeams = useCallback(() => {
+    api("/teams", { role: "staff" })
+      .then(setTeams)
+      .catch(() => setTeams([]));
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+    loadTeams();
+    // The team list and the stats move without a reload: when a crew marks a
+    // report fixed the tiles and the Teams tab update within ten seconds.
+    const timer = setInterval(() => {
+      loadStats();
+      loadTeams();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [loadStats, loadTeams]);
+
+  // Work order: report number ascending, so #1 is the first line and the
+  // numbers only climb as you scroll (the seed ages reports to match, so the
+  // date and the number tell the same story). Finished (fixed) reports are
+  // pinned to the bottom where they no longer need attention.
   const queue = useMemo(
-    () => [...reports].sort((a, b) => b.score - a.score || b.id - a.id),
+    () =>
+      [...reports].sort((a, b) => {
+        const aFixed = a.status === "fixed" ? 1 : 0;
+        const bFixed = b.status === "fixed" ? 1 : 0;
+        if (aFixed !== bFixed) return aFixed - bFixed;
+        return a.id - b.id;
+      }),
     [reports],
   );
 
@@ -56,28 +87,51 @@ function Dashboard() {
       ]
     : [];
 
+  const monthly = stats?.monthly || [];
+  const maxMonth = Math.max(...monthly.map((m) => m.count), 0);
+  const byStatus = stats?.byStatus || {};
+  const maxStatus = Math.max(...STATUS_KEYS.map((k) => byStatus[k] || 0), 1);
+  const byPriority = stats?.byPriority || {};
+
   return (
     <div className="flex min-h-screen flex-col bg-navy text-white">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 pt-5">
+      <header className="relative flex items-center justify-between px-4 pt-5">
         <button
           type="button"
-          aria-label="Exit portal"
-          onClick={() => signOut("staff")}
+          aria-label="Menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((o) => !o)}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
         >
           <MenuIcon className="h-5 w-5" />
         </button>
-        <h1 className="text-lg font-extrabold">Pothole Portal</h1>
-        <button
-          type="button"
-          aria-label="Alerts"
-          className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/10"
-        >
-          <BellIcon className="h-5 w-5" />
-          <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-amber-400" />
-        </button>
+        <h1 className="text-lg font-extrabold">Staff Portal</h1>
+        <span className="w-10" aria-hidden="true" />
       </header>
+
+      {/* Hamburger dropdown: account + log out */}
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+          <div className="absolute left-4 top-16 z-50 w-60 overflow-hidden rounded-2xl bg-white text-ink shadow-xl ring-1 ring-black/5">
+            <div className="border-b border-line px-4 py-3">
+              <p className="truncate text-sm font-bold">{staff?.user?.name || "Staff member"}</p>
+              <p className="truncate text-xs text-muted">{staff?.user?.email}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                signOut("staff");
+              }}
+              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-red-600 hover:bg-red-50"
+            >
+              <LogoutIcon className="h-4 w-4" /> Log out
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Tabs */}
       <div className="mt-4 flex gap-2 overflow-x-auto px-4">
@@ -212,53 +266,112 @@ function Dashboard() {
 
         {tab === "Teams" && (
           <ul className="mt-4 space-y-2.5">
-            {CREWS.map((c) => (
-              <li key={c.name} className="flex items-center gap-3 rounded-2xl bg-white p-3.5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-                  <CheckCircleIcon className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-ink">{c.name}</p>
-                  <p className="text-xs text-muted">{c.area}</p>
-                </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
-                  {c.status}
-                </span>
-              </li>
-            ))}
+            {teams.map((t) => {
+              const tone = TEAM_TONES[t.status] || TEAM_TONES.available;
+              const Icon = t.status === "onsite" ? AlertIcon : t.status === "dispatched" ? NavigationIcon : CheckCircleIcon;
+              return (
+                <li key={t.id} className="flex items-center gap-3 rounded-2xl bg-white p-3.5">
+                  <span
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                    style={{ background: tone.bg, color: tone.color }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-ink">{t.name}</p>
+                    <p className="truncate text-xs text-muted">
+                      {t.status === "available" || !t.reportRef
+                        ? "Ready for the next job"
+                        : `${t.status === "onsite" ? "On site at" : "Heading to"} ${t.reportRef} · ${t.area}`}
+                    </p>
+                  </div>
+                  <span
+                    className="shrink-0 rounded-md px-2 py-1 text-[11px] font-bold"
+                    style={{ background: tone.bg, color: tone.color }}
+                  >
+                    {tone.label}
+                  </span>
+                </li>
+              );
+            })}
+            {teams.length === 0 && (
+              <p className="mt-6 text-center text-sm font-semibold text-white/60">No teams registered.</p>
+            )}
           </ul>
         )}
 
         {tab === "Analytics" && (
-          <div className="mt-4 rounded-3xl bg-white p-4">
-            <div className="flex items-center gap-2">
-              <TrendingIcon className="h-5 w-5 text-primary" />
-              <h2 className="text-sm font-extrabold text-ink">Reports per month</h2>
-            </div>
-            {/* Static mock bar chart */}
-            <div className="mt-4 flex h-44 items-end gap-3">
-              {[
-                ["May", 46],
-                ["Jun", 58],
-                ["Jul", 72],
-                ["Aug", 64],
-                ["Sep", 88],
-                ["Oct", 76],
-              ].map(([month, h]) => (
-                <div key={month} className="flex flex-1 flex-col items-center gap-1.5">
-                  <div
-                    className="w-full rounded-t-lg bg-primary/85"
-                    style={{ height: `${h}%` }}
-                    title={`${h} reports`}
-                  />
-                  <span className="text-[10px] font-bold text-muted">{month}</span>
+          <div className="mt-4 space-y-4">
+            {/* Reports per month (real counts from created_at) */}
+            <div className="rounded-3xl bg-white p-4">
+              <div className="flex items-center gap-2">
+                <TrendingIcon className="h-5 w-5 text-primary" />
+                <h2 className="text-sm font-extrabold text-ink">Reports per month</h2>
+              </div>
+              {maxMonth > 0 ? (
+                <div className="mt-4 flex h-44 items-end gap-3">
+                  {monthly.map((m) => (
+                    <div key={m.month} className="flex flex-1 flex-col items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-muted">{m.count}</span>
+                      <div
+                        className="w-full rounded-t-lg"
+                        style={{
+                          height: `${Math.max(6, Math.round((m.count / maxMonth) * 128))}px`,
+                          background: "#1d5beb",
+                        }}
+                        title={`${m.count} reports`}
+                      />
+                      <span className="text-[10px] font-bold text-muted">{m.month}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <p className="mt-4 text-sm font-semibold text-muted">No reports yet.</p>
+              )}
+              <p className="mt-3 text-xs text-muted">Real figures from the database, newest month last.</p>
             </div>
-            <p className="mt-3 text-xs text-muted">
-              Sample figures. The seeded dataset only covers the last 30 days, so there
-              is no real history to plot yet.
-            </p>
+
+            {/* By status */}
+            <div className="rounded-3xl bg-white p-4">
+              <h2 className="text-sm font-extrabold text-ink">By status</h2>
+              <ul className="mt-3 space-y-2.5">
+                {STATUS_KEYS.map((k) => {
+                  const s = STATUS[k] || STATUS.new;
+                  const count = byStatus[k] || 0;
+                  return (
+                    <li key={k} className="flex items-center gap-3">
+                      <span className="w-24 shrink-0 text-xs font-bold text-ink">{s.label}</span>
+                      <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <span
+                          className="block h-full rounded-full"
+                          style={{ width: `${Math.round((count / maxStatus) * 100)}%`, background: s.color }}
+                        />
+                      </span>
+                      <span className="w-8 shrink-0 text-right text-xs font-bold text-muted">{count}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {/* By priority */}
+            <div className="rounded-3xl bg-white p-4">
+              <h2 className="text-sm font-extrabold text-ink">By priority</h2>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                {[
+                  ["P1", "#fee2e2", "#dc2626"],
+                  ["P2", "#fef3c7", "#d97706"],
+                  ["P3", "#dcfce7", "#16a34a"],
+                ].map(([p, bg, color]) => (
+                  <div key={p} className="rounded-2xl p-3 text-center" style={{ background: bg }}>
+                    <p className="text-xl font-extrabold" style={{ color }}>
+                      {byPriority[p] || 0}
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-bold text-slate-600">{p}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

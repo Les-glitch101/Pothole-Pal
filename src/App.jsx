@@ -10,6 +10,7 @@ import Notifications from "./pages/Notifications";
 import MyReports from "./pages/MyReports";
 import ReportDetails from "./pages/ReportDetails";
 import Dashboard from "./pages/Dashboard";
+import TeamDashboard from "./pages/TeamDashboard";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -25,8 +26,8 @@ function RequireResident({ children }) {
 }
 
 function RequireAnySession({ children }) {
-  const { resident, staff } = useFlow();
-  if (!resident && !staff) return <Navigate to="/login" replace />;
+  const { resident, staff, team } = useFlow();
+  if (!resident && !staff && !team) return <Navigate to="/login" replace />;
   return children;
 }
 
@@ -37,29 +38,36 @@ function StaffGate() {
   return staff?.user?.role === "staff" ? <Dashboard /> : <Navigate to="/login" replace />;
 }
 
+function TeamGate() {
+  const { team } = useFlow();
+  // Field crews (teama@staff.com - teamh@staff.com) land here after sign-in.
+  return team?.user?.role === "team" ? <TeamDashboard /> : <Navigate to="/login" replace />;
+}
+
 function App() {
   const [draft, setDraftState] = useState(EMPTY_DRAFT);
   const [reports, setReports] = useState([]);
   const [resident, setResident] = useState(() => getSession("resident"));
   const [staff, setStaff] = useState(() => getSession("staff"));
+  const [team, setTeam] = useState(() => getSession("team"));
 
   const setDraft = useCallback((patch) => {
     setDraftState((d) => ({ ...d, ...patch }));
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!resident && !staff) {
+    if (!resident && !staff && !team) {
       setReports([]);
       return;
     }
-    const role = resident ? "resident" : "staff";
+    const role = resident ? "resident" : staff ? "staff" : "team";
     try {
       setReports(await api("/reports", { role }));
     } catch {
       // A 401 already redirected to the login screen; anything else leaves the
       // current list in place.
     }
-  }, [resident, staff]);
+  }, [resident, staff, team]);
 
   useEffect(() => {
     refresh();
@@ -68,14 +76,15 @@ function App() {
   // Keep both sides of the demo in sync without a manual reload: staff status
   // changes show up on the resident's screen within a few seconds.
   useEffect(() => {
-    if (!resident && !staff) return undefined;
+    if (!resident && !staff && !team) return undefined;
     const timer = setInterval(() => refresh(), 10000);
     return () => clearInterval(timer);
-  }, [resident, staff, refresh]);
+  }, [resident, staff, team, refresh]);
 
   const signIn = useCallback((role, session) => {
     setSession(role, session);
     if (role === "staff") setStaff(session);
+    else if (role === "team") setTeam(session);
     else setResident(session);
   }, []);
 
@@ -83,6 +92,7 @@ function App() {
     api("/auth/logout", { method: "POST", role }).catch(() => {});
     clearSession(role);
     if (role === "staff") setStaff(null);
+    else if (role === "team") setTeam(null);
     else setResident(null);
   }, []);
 
@@ -111,10 +121,11 @@ function App() {
       submitDraft,
       resident,
       staff,
+      team,
       signIn,
       signOut,
     }),
-    [draft, setDraft, reports, myReports, refresh, submitDraft, resident, staff, signIn, signOut],
+    [draft, setDraft, reports, myReports, refresh, submitDraft, resident, staff, team, signIn, signOut],
   );
 
   return (
@@ -125,6 +136,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot" element={<ForgotPassword />} />
           <Route path="/staff" element={<StaffGate />} />
+          <Route path="/team" element={<TeamGate />} />
           <Route path="/dashboard" element={<Navigate to="/staff" replace />} />
           <Route path="/" element={<RequireResident><Home /></RequireResident>} />
           <Route path="/map" element={<RequireResident><MapScreen /></RequireResident>} />

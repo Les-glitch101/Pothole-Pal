@@ -18,6 +18,8 @@ import {
   distanceKm,
   relativeTime,
   formatStamp,
+  rankOf,
+  BADGES,
 } from "./lib/domain.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -69,10 +71,21 @@ function requireAuth(req, res, next) {
   next();
 }
 
-function requireStaff(req, res, next) {
+// The municipal dashboard and the field-team portal share the report list
+// and the stats; only the staff-only endpoints stay staff-only.
+function requireStaffOrTeam(req, res, next) {
   requireAuth(req, res, () => {
-    if (req.user.role !== "staff") {
-      return res.status(403).json({ error: { code: "forbidden", message: "Staff access only." } });
+    if (req.user.role !== "staff" && req.user.role !== "team") {
+      return res.status(403).json({ error: { code: "forbidden", message: "Staff or team access only." } });
+    }
+    next();
+  });
+}
+
+function requireTeam(req, res, next) {
+  requireAuth(req, res, () => {
+    if (req.user.role !== "team") {
+      return res.status(403).json({ error: { code: "forbidden", message: "Field team access only." } });
     }
     next();
   });
@@ -104,6 +117,7 @@ function timelineSlots(rows) {
 
 function mapReport(row, history, userId) {
   const { severity, severityNote } = severityOf(row.size);
+  const reporterPoints = Number(row.reporter_points ?? 0);
   return {
     id: row.id,
     ref: row.ref,
@@ -126,7 +140,11 @@ function mapReport(row, history, userId) {
     photo: row.photo_url,
     evidence: row.evidence_url,
     reportedAt: relativeTime(row.created_at),
+    createdAt: new Date(row.created_at).toISOString(),
     reporter: row.reporter_name || null,
+    // The rank title beside the reporter's name on the details page comes
+    // from their points, so it matches what their own profile shows.
+    reporterTitle: row.reporter_name ? rankOf(reporterPoints).title : null,
     isMine: userId != null && row.reporter_id === userId,
     timeline: timelineSlots(history),
   };
@@ -135,7 +153,7 @@ function mapReport(row, history, userId) {
 async function loadReports({ userId = null, order = "recent" } = {}) {
   const orderBy = order === "priority" ? "r.score DESC, r.created_at DESC" : "r.created_at DESC";
   const { recordset } = await pool.request().query(
-    `SELECT r.*, u.name AS reporter_name FROM dbo.reports r
+    `SELECT r.*, u.name AS reporter_name, u.points AS reporter_points FROM dbo.reports r
      JOIN dbo.users u ON u.id = r.reporter_id ORDER BY ${orderBy}`,
   );
   const timelines = await loadTimeline(recordset.map((r) => r.id));
@@ -144,7 +162,7 @@ async function loadReports({ userId = null, order = "recent" } = {}) {
 
 async function loadReport(id, userId) {
   const { recordset } = await pool.request().input("id", sql.Int, id).query(
-    `SELECT r.*, u.name AS reporter_name FROM dbo.reports r
+    `SELECT r.*, u.name AS reporter_name, u.points AS reporter_points FROM dbo.reports r
      JOIN dbo.users u ON u.id = r.reporter_id WHERE r.id = @id`,
   );
   if (!recordset[0]) return null;
@@ -294,7 +312,70 @@ app.get("/api/v1/auth/me", requireAuth, async (req, res) => {
   const { recordset } = await pool.request().input("id", sql.Int, req.user.id)
     .query("SELECT id, name, email, role, points, level FROM dbo.users WHERE id = @id");
   if (!recordset[0]) return res.status(401).json({ error: { code: "unauthorized", message: "Please sign in." } });
-  res.json(recordset[0]);
+  const u = recordset[0];
+
+  // The profile reads this: live report counts feed the badge rules, and the
+  // rank title comes from points so it always matches the level chip.
+  const { recordset: counts } = await pool.request().input("uid", sql.Int, u.id).query(`
+    SELECT COUNT(*) AS reports,
+           SUM(CASE WHEN status = 'fixed' THEN 1 ELSE 0 END) AS fixed
+    FROM dbo.reports WHERE reporter_id = @uid`);
+  const stats = {
+    points: Number(u.points),
+    reports: Number(counts[0].reports || 0),
+    fixed: Number(counts[0].fixed || 0),
+  };
+  const rank = rankOf(stats.points);
+  res.json({
+    ...u,
+    level: rank.level,
+    rank: { title: rank.title, level: rank.level },
+    stats,
+    badges: BADGES.map((b) => ({ key: b.key, label: b.label, hint: b.hint, earned: b.test(stats) })),
+  });
+});
+
+// Residents ranked against each other: position, name, rank title, points and
+// how much of it they have actually reported. Staff and teams are excluded.
+app.get("/api/v1/leaderboard", requireAuth, async (req, res) => {
+  const { recordset } = await pool.request().query(`
+    SELECT TOP 10 u.id, u.name, u.points,
+           (SELECT COUNT(*) FROM dbo.reports r WHERE r.reporter_id = u.id) AS reports,
+           (SELECT COUNT(*) FROM dbo.reports r WHERE r.reporter_id = u.id AND r.status = 'fixed') AS fixed
+    FROM dbo.users u
+    WHERE u.role = 'resident'
+    ORDER BY u.points DESC, u.id ASC`);
+  const top = recordset.map((r, i) => {
+    const rank = rankOf(Number(r.points));
+    return {
+      position: i + 1,
+      id: r.id,
+      name: r.name,
+      points: Number(r.points),
+      level: rank.level,
+      title: rank.title,
+      reports: Number(r.reports),
+      fixed: Number(r.fixed),
+    };
+  });
+
+  // Where does the signed-in resident sit, even outside the top ten? Ties go
+  // to whoever got there first (lower id).
+  const { recordset: mine } = await pool.request().input("uid", sql.Int, req.user.id)
+    .query("SELECT points FROM dbo.users WHERE id = @uid");
+  const myPoints = Number(mine[0]?.points || 0);
+  const { recordset: ahead } = await pool.request()
+    .input("uid", sql.Int, req.user.id)
+    .input("pts", sql.Int, myPoints)
+    .query(`SELECT COUNT(*) AS n FROM dbo.users
+            WHERE role = 'resident' AND id <> @uid AND (points > @pts OR (points = @pts AND id < @uid))`);
+  const { recordset: totalRows } = await pool.request()
+    .query("SELECT COUNT(*) AS n FROM dbo.users WHERE role = 'resident'");
+
+  res.json({
+    top,
+    me: { position: Number(ahead[0].n) + 1, total: Number(totalRows[0].n), points: myPoints },
+  });
 });
 
 // ---------------------------------------------------------------- reports
@@ -463,7 +544,7 @@ const STATUS_NOTIFICATIONS = {
   fixed: { type: "fixed", title: (r) => `Report ${r.ref} fixed`, body: () => "The pothole has been repaired. Thanks for helping keep the roads safe." },
 };
 
-app.patch("/api/v1/reports/:id", requireStaff, async (req, res) => {
+app.patch("/api/v1/reports/:id", requireStaffOrTeam, async (req, res) => {
   const id = badId(req, res);
   if (id === null) return;
   const status = String(req.body?.status || "");
@@ -474,6 +555,19 @@ app.patch("/api/v1/reports/:id", requireStaff, async (req, res) => {
     .query("SELECT id, ref, reporter_id, status FROM dbo.reports WHERE id = @id");
   const report = recordset[0];
   if (!report) return res.status(404).json({ error: { code: "not_found", message: `Report #${id} could not be found.` } });
+
+  // Field crews move the progress only of the report they are standing on:
+  // anything else (available, dispatched, or on site elsewhere) is a 403.
+  if (req.user.role === "team") {
+    const { recordset: mine } = await pool.request().input("uid", sql.Int, req.user.id)
+      .query("SELECT status, report_id FROM dbo.teams WHERE user_id = @uid");
+    const assignment = mine[0];
+    if (!assignment || assignment.status !== "onsite" || Number(assignment.report_id) !== id) {
+      return res.status(403).json({
+        error: { code: "not_on_site", message: "Your crew must be marked on site at this report to move its progress." },
+      });
+    }
+  }
 
   let update = "UPDATE dbo.reports SET status = @status, updated_at = SYSUTCDATETIME()";
   if (status === "scheduled") update += ", scheduled_at = SYSUTCDATETIME()";
@@ -499,8 +593,13 @@ app.patch("/api/v1/reports/:id", requireStaff, async (req, res) => {
     });
   }
   if (status === "fixed" && report.reporter_id) {
-    await pool.request().input("uid", sql.Int, report.reporter_id)
-      .query("UPDATE dbo.users SET points = points + 50 WHERE id = @uid");
+    // +50 points, and the level is recomputed from the new total so a rank-up
+    // lands at the same moment the points do.
+    const { recordset: earned } = await pool.request().input("uid", sql.Int, report.reporter_id)
+      .query("UPDATE dbo.users SET points = points + 50 OUTPUT INSERTED.points WHERE id = @uid");
+    const newPoints = Number(earned[0].points);
+    await pool.request().input("uid", sql.Int, report.reporter_id).input("level", sql.Int, rankOf(newPoints).level)
+      .query("UPDATE dbo.users SET level = @level WHERE id = @uid");
     await insertRow(pool.request(), "dbo.notifications", {
       user_id: report.reporter_id,
       report_id: id,
@@ -513,11 +612,79 @@ app.patch("/api/v1/reports/:id", requireStaff, async (req, res) => {
   res.json(await loadReport(id, req.user.id));
 });
 
-app.get("/api/v1/staff/queue", requireStaff, async (req, res) => {
+app.get("/api/v1/staff/queue", requireStaffOrTeam, async (req, res) => {
   res.json(await loadReports({ userId: req.user.id, order: "priority" }));
 });
 
-app.get("/api/v1/staff/stats", requireStaff, async (req, res) => {
+// -------------------------------------------------------------- field teams
+// Live assignment state per team: available, dispatched (heading to site),
+// or on site at a specific report. The staff Teams tab and the team portal
+// both read this; only the signed-in team can change its own row.
+app.get("/api/v1/teams", requireStaffOrTeam, async (req, res) => {
+  const { recordset } = await pool.request().query(`
+    SELECT u.id, u.name, t.status, t.report_id, t.updated_at, r.ref, r.area
+    FROM dbo.users u
+    LEFT JOIN dbo.teams t ON t.user_id = u.id
+    LEFT JOIN dbo.reports r ON r.id = t.report_id
+    WHERE u.role = 'team'
+    ORDER BY u.name`);
+  res.json(
+    recordset.map((t) => ({
+      id: t.id,
+      name: t.name,
+      status: t.status || "available",
+      reportId: t.report_id || null,
+      reportRef: t.ref || null,
+      area: t.area || null,
+    })),
+  );
+});
+
+app.post("/api/v1/teams/status", requireTeam, async (req, res) => {
+  const status = String(req.body?.status || "");
+  if (!["available", "dispatched", "onsite"].includes(status)) {
+    return res.status(400).json({ error: { code: "invalid_status", message: "Status must be available, dispatched or onsite." } });
+  }
+  let reportId = req.body?.reportId == null ? null : Number(req.body.reportId);
+  if (status === "available") {
+    reportId = null;
+  } else {
+    if (!Number.isInteger(reportId)) {
+      return res.status(400).json({ error: { code: "report_required", message: "Pick the report your team is working on." } });
+    }
+    const { recordset } = await pool.request().input("id", sql.Int, reportId)
+      .query("SELECT id FROM dbo.reports WHERE id = @id");
+    if (!recordset[0]) {
+      return res.status(404).json({ error: { code: "not_found", message: `Report #${reportId} could not be found.` } });
+    }
+    // One report, one crew: nobody else may already be dispatched there or
+    // standing on it (picking your own row again is fine).
+    const { recordset: held } = await pool.request()
+      .input("reportId", sql.Int, reportId)
+      .input("uid", sql.Int, req.user.id)
+      .query(`SELECT u.name FROM dbo.teams t JOIN dbo.users u ON u.id = t.user_id
+              WHERE t.report_id = @reportId AND t.status <> 'available' AND t.user_id <> @uid`);
+    if (held[0]) {
+      return res.status(409).json({
+        error: {
+          code: "report_claimed",
+          message: `Report #${reportId} is already assigned to ${held[0].name}.`,
+        },
+      });
+    }
+  }
+  await pool.request()
+    .input("uid", sql.Int, req.user.id)
+    .input("status", sql.NVarChar(20), status)
+    .input("reportId", sql.Int, reportId)
+    .query(`MERGE dbo.teams AS target
+            USING (SELECT @uid AS user_id) AS src ON target.user_id = src.user_id
+            WHEN MATCHED THEN UPDATE SET status = @status, report_id = @reportId, updated_at = SYSUTCDATETIME()
+            WHEN NOT MATCHED THEN INSERT (user_id, status, report_id) VALUES (@uid, @status, @reportId);`);
+  res.json({ ok: true, status, reportId });
+});
+
+app.get("/api/v1/staff/stats", requireStaffOrTeam, async (req, res) => {
   const { recordset } = await pool.request().query(`
     SELECT COUNT(*) AS total,
            SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) AS new_count,
@@ -533,6 +700,27 @@ app.get("/api/v1/staff/stats", requireStaff, async (req, res) => {
     weight: 1 + Number(r.duplicate_count || 0),
   }));
 
+  // Analytics: real reports per month for the last six months, plus status
+  // and priority breakdowns, all computed from the database.
+  const { recordset: monthlyRows } = await pool.request().query(`
+    SELECT FORMAT(created_at, 'yyyy-MM') AS ym, COUNT(*) AS n
+    FROM dbo.reports
+    WHERE created_at >= DATEADD(month, -5, DATEFROMPARTS(YEAR(SYSDATETIME()), MONTH(SYSDATETIME()), 1))
+    GROUP BY FORMAT(created_at, 'yyyy-MM')`);
+  const now = new Date();
+  const monthly = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const row = monthlyRows.find((r) => r.ym === ym);
+    monthly.push({ month: d.toLocaleString("en-US", { month: "short" }), count: Number(row?.n || 0) });
+  }
+
+  const byStatusRows = (await pool.request().query("SELECT status, COUNT(*) AS n FROM dbo.reports GROUP BY status")).recordset;
+  const byStatus = Object.fromEntries(byStatusRows.map((r) => [r.status, Number(r.n)]));
+  const byPriorityRows = (await pool.request().query("SELECT priority, COUNT(*) AS n FROM dbo.reports GROUP BY priority")).recordset;
+  const byPriority = Object.fromEntries(byPriorityRows.map((r) => [r.priority, Number(r.n)]));
+
   const all = await loadReports({ userId: req.user.id });
   res.json({
     total,
@@ -541,6 +729,9 @@ app.get("/api/v1/staff/stats", requireStaff, async (req, res) => {
     resolutionRate: total ? Math.round((fixedCount / total) * 100) : 0,
     heat,
     recent: all.slice(0, 5),
+    monthly,
+    byStatus,
+    byPriority,
   });
 });
 
