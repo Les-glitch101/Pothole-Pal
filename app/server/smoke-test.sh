@@ -58,7 +58,7 @@ print(len(g)>=3 and g[0]=='Today' and g[1]=='Yesterday' and bool(re.match(r'^\\d
 
 # 5. submit a report (P1 candidate: Large/Deep/High/Yes = score 11)
 POST1=$(curl -s -w '\n%{http_code}' -X POST "$BASE/reports" -H "Authorization: Bearer $RTOK" \
-  -F "photo=@public/favicon-48.png;type=image/png" \
+  -F "photo=@app/public/favicon-48.png;type=image/png" \
   -F "lat=-26.71" -F "lng=27.97" \
   -F "address=Vereeniging, Gauteng, South Africa" -F "issueType=Pothole" \
   -F "size=Large" -F "depth=Deep" -F "traffic=High" -F "damage=Yes" \
@@ -74,7 +74,7 @@ check "new report belongs to the reporter" "$(echo "$P1BODY" | py "import sys,js
 
 # 6. duplicate within 50 m returns 409 with the existing reference
 POST2=$(curl -s -w '\n%{http_code}' -X POST "$BASE/reports" -H "Authorization: Bearer $RTOK" \
-  -F "photo=@public/favicon-48.png;type=image/png" \
+  -F "photo=@app/public/favicon-48.png;type=image/png" \
   -F "lat=-26.71" -F "lng=27.97" \
   -F "address=Vereeniging, Gauteng, South Africa" -F "issueType=Pothole" \
   -F "size=Small" -F "depth=Shallow" -F "traffic=Low" -F "damage=No" \
@@ -167,7 +167,7 @@ check "stats include monthly history" "$(echo "$STATS2" | py "import sys,json;pr
 
 # 11. attach supporting evidence to the duplicate instead of a second work item
 EV=$(curl -s -X POST "$BASE/reports/1025/evidence" -H "Authorization: Bearer $RTOK" \
-  -F "photo=@public/logo-96.png;type=image/png")
+  -F "photo=@app/public/logo-96.png;type=image/png")
 check "evidence photo attached" "$(echo "$EV" | py "import sys,json;e=json.load(sys.stdin).get('evidence','');print(e.startswith('/uploads/'))" 2>/dev/null)" "True"
 check "still exactly 98 reports (no second work item)" "$(curl -s "$BASE/reports" -H "Authorization: Bearer $RTOK" | py "import sys,json;print(len(json.load(sys.stdin)))" 2>/dev/null)" "98"
 
@@ -177,7 +177,7 @@ NOPHOTO=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/reports/1025" -
 check "PATCH straight to fixed is refused (needs a photo)" "$NOPHOTO" "400"
 
 FIX=$(curl -s -X POST "$BASE/reports/1025/complete" -H "Authorization: Bearer $STOK" \
-  -F "photo=@public/logo-96.png;type=image/png")
+  -F "photo=@app/public/logo-96.png;type=image/png")
 check "staff closes report 1025 with a repair photo" "$(echo "$FIX" | py "import sys,json;print(json.load(sys.stdin).get('status',''))" 2>/dev/null)" "fixed"
 check "closed report carries the repair photo" "$(echo "$FIX" | py "import sys,json;p=json.load(sys.stdin).get('fixedPhoto') or '';print(p.startswith('/uploads/'))" 2>/dev/null)" "True"
 check "repair photo visible to the resident" "$(curl -s "$BASE/reports/1025" -H "Authorization: Bearer $RTOK" | py "import sys,json;p=json.load(sys.stdin).get('fixedPhoto') or '';print(p.startswith('/uploads/'))" 2>/dev/null)" "True"
