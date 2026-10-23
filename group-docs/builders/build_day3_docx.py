@@ -1,6 +1,7 @@
-"""Build docs/PotholePal-day3-fixes.docx.
+"""Build group-docs/PotholePal-day3-fixes.docx.
 
-Re-run after editing the content below:  python docs/build_day3_docx.py
+Re-run after editing the content below (from the project root):
+python group-docs/builders/build_day3_docx.py
 """
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
@@ -333,7 +334,7 @@ doc.add_heading("Running it in the browser", level=1)
 doc.add_heading("Demo mode: one process, use this for the presentation", level=2)
 code([
     "npm run build",
-    "cd server && npm start",
+    "cd app/server && npm start",
     "http://localhost:3001",
 ])
 doc.add_paragraph(
@@ -348,7 +349,7 @@ code([
 
 doc.add_heading("Development mode: hot reload, two terminals", level=2)
 code([
-    "Terminal 1:  cd server && npm start     (API on 3001)",
+    "Terminal 1:  cd app/server && npm start (API on 3001)",
     "Terminal 2:  npm run dev                (front end on 5173)",
     "http://localhost:5173",
 ])
@@ -435,7 +436,7 @@ numbered([
     "Put the phone and the laptop on the same Wi-Fi (not mobile data, not a guest "
     "network).",
     "On the laptop, if the server is not already running: npm run build, then "
-    "cd server && npm start.",
+    "cd app/server && npm start.",
     "On the phone, open https://192.168.0.187:3443",
     "The browser warns about the certificate the first time. That warning is expected: "
     "the certificate is generated locally for this laptop. On Android Chrome tap "
@@ -453,7 +454,7 @@ note(
     'netsh advfirewall firewall show rule name="PotholePal demo".'
 )
 note(
-    "A changed address means one command: npm run certs inside server/ from Git "
+    "A changed address means one command: npm run certs inside app/server/ from Git "
     "Bash, then start the server again. Regenerate whenever the browser says the "
     "certificate does not cover the address you opened."
 )
@@ -543,14 +544,14 @@ bullets([
 ])
 
 try:
-    doc.save("docs/PotholePal-day3-fixes.docx")
-    print("wrote docs/PotholePal-day3-fixes.docx")
+    doc.save("group-docs/PotholePal-day3-fixes.docx")
+    print("wrote group-docs/PotholePal-day3-fixes.docx")
 except PermissionError:
     # The document is open in Word or a viewer: write beside it, and rerun this
     # script once it is closed to replace the main file.
-    doc.save("docs/PotholePal-day3-fixes-updated.docx")
+    doc.save("group-docs/PotholePal-day3-fixes-updated.docx")
     print(
         "PotholePal-day3-fixes.docx is open somewhere; "
-        "wrote docs/PotholePal-day3-fixes-updated.docx instead. "
+        "wrote group-docs/PotholePal-day3-fixes-updated.docx instead. "
         "Close it and rerun to replace the main file."
     )

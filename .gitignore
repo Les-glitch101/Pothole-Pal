@@ -12,8 +12,14 @@ dist
 dist-ssr
 *.local
 
+# The root package.json is a zero-dependency proxy into app/; it has no lockfile
+/package-lock.json
+
 # Local HTTPS certificate for phone testing (never commit private keys)
-server/certs/
+app/server/certs/
+
+# Word lock files (created while a document is open in Word)
+~$*
 
 # Editor directories and files
 .vscode/*
@@ -28,5 +34,5 @@ server/certs/
 
 # Backend: secrets and uploaded photos
 .env
-server/uploads/
+app/server/uploads/
 /freebuff-sites-build/

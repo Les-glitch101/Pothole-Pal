@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PotholePal API smoke test.
-# With the server running (cd server && npm start), from the project root:
-#   bash server/smoke-test.sh
+# With the server running (cd app/server && npm start), from the project root:
+#   bash app/server/smoke-test.sh
 set -u
 BASE="http://localhost:3001/api/v1"
 fail=0

@@ -1,6 +1,7 @@
-"""Build docs/PotholePal-day4-portals.docx.
+"""Build group-docs/PotholePal-day4-portals.docx.
 
-Re-run after editing the content below:  python docs/build_day4_docx.py
+Re-run after editing the content below (from the project root):
+python group-docs/builders/build_day4_docx.py
 """
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
@@ -261,14 +262,14 @@ numbered(
     [
         "npm run lint: clean, zero problems.",
         "npm run build: built in about 11 seconds.",
-        "bash server/smoke-test.sh from the project root: 48 of 48 checks passed. The original 26 still pass unchanged; twelve team checks cover the crew rules, and ten rank checks cover the +50 points payout landing on 1300, the rank title and level following the ladder, badge rules firing (first earned, veteran still locked, top reporter earned on points), and the leaderboard order with positions 1 to 4 and the signed-in resident's own position.",
+        "bash app/server/smoke-test.sh from the project root: 48 of 48 checks passed. The original 26 still pass unchanged; twelve team checks cover the crew rules, and ten rank checks cover the +50 points payout landing on 1300, the rank title and level following the ladder, badge rules firing (first earned, veteran still locked, top reporter earned on points), and the leaderboard order with positions 1 to 4 and the signed-in resident's own position.",
         "npm run db:reset after testing, so the demo data is back to the canonical state: 14 users, 97 reports, Team A on site, Team B dispatched.",
     ]
 )
 note(
     "One thing worth repeating for next time: the smoke test must run from the project "
-    "root, not from server/. Its photo paths are relative to the root, and running it "
-    "from server/ makes every upload check fail with an empty response code."
+    "root, not from app/server/. Its photo paths are relative to the root, and running it "
+    "from app/server/ makes every upload check fail with an empty response code."
 )
 
 # ---------------------------------------------------------------- 5
@@ -276,11 +277,11 @@ doc.add_heading("5. Commands used today, step by step", level=1)
 doc.add_heading("Bring a fresh machine up to date", level=2)
 numbered(
     [
-        "npm install in the project root, and again in server/.",
-        "cd server && npm run db:setup (adds the teams table; safe to rerun).",
-        "cd server && npm run db:reset (clean demo data with the team assignments).",
+        "npm install in app/ (front end) and in app/server/ (API).",
+        "cd app/server && npm run db:setup (adds the teams table; safe to rerun).",
+        "cd app/server && npm run db:reset (clean demo data with the team assignments).",
         "npm run build in the root.",
-        "cd server && npm start, then open http://localhost:3001.",
+        "cd app/server && npm start, then open http://localhost:3001.",
     ]
 )
 doc.add_heading("Test both portals", level=2)
@@ -289,13 +290,13 @@ numbered(
         "Staff: sign in as staff@potholepal.test / staff123. Check the Reports order, the Analytics bars, and the hamburger menu.",
         "Teams: sign in as teama@staff.com / team123 (same pattern for teamb through teamh). Open a report, click On site or Dispatched, then Advance the progress.",
         "Watch the staff Teams tab update within ten seconds of a crew changing state.",
-        "Run bash server/smoke-test.sh from the project root for the automated version.",
+        "Run bash app/server/smoke-test.sh from the project root for the automated version.",
     ]
 )
 doc.add_heading("Reset the demo after a messy run", level=2)
 numbered(
     [
-        "cd server && npm run db:reset",
+        "cd app/server && npm run db:reset",
         "Expect 'team demo state seeded (Team A on site at ..., Team B dispatched to ...)' and 'seed complete: 14 users, 97 reports'.",
     ]
 )
@@ -336,11 +337,11 @@ note(
 )
 
 # ---------------------------------------------------------------- save
-out = "docs/PotholePal-day4-portals.docx"
+out = "group-docs/PotholePal-day4-portals.docx"
 try:
     doc.save(out)
     print("saved:", out)
 except PermissionError:
-    alt = "docs/PotholePal-day4-portals-updated.docx"
+    alt = "group-docs/PotholePal-day4-portals-updated.docx"
     doc.save(alt)
     print("Word has the file open; saved to:", alt)

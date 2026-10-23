@@ -1,6 +1,7 @@
-"""Build docs/PotholePal-day2-backend.docx.
+"""Build group-docs/PotholePal-day2-backend.docx.
 
-Re-run after editing the content below:  python docs/build_day2_docx.py
+Re-run after editing the content below (from the project root):
+python group-docs/builders/build_day2_docx.py
 """
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
@@ -94,12 +95,12 @@ doc.add_paragraph(
 table(
     ["Piece", "What it is", "Where it lives"],
     [
-        ["Front end", "React 19.3, Vite 7.3, Tailwind 4, Leaflet 1.9, react-router 7.18", "src/, built into dist/"],
-        ["API server", "Express 5.3, 14 endpoints, bearer-token sessions", "server/index.js, port 3001"],
+        ["Front end", "React 19.3, Vite 7.3, Tailwind 4, Leaflet 1.9, react-router 7.18", "app/src/, built into app/dist/"],
+        ["API server", "Express 5.3, 14 endpoints, bearer-token sessions", "app/server/index.js, port 3001"],
         ["Database", "SQL Server 2022, database PotholePal, 4 tables", "your local instance MSSQLSERVER"],
-        ["Photos", "Uploaded files on disk, path stored in the reports table", "server/uploads/ (git-ignored)"],
+        ["Photos", "Uploaded files on disk, path stored in the reports table", "app/server/uploads/ (git-ignored)"],
         ["Passwords", "bcrypt hashes, 10 rounds", "users.password_hash"],
-        ["Secrets", "Database login password", "server/.env (git-ignored)"],
+        ["Secrets", "Database login password", "app/server/.env (git-ignored)"],
     ],
     widths=[1.2, 3.4, 2.0],
 )
@@ -207,13 +208,13 @@ bullets([
     "with port 1433 on the IP addresses used. Loopback only, so nothing opened to the network; the firewall was not touched.",
 ])
 doc.add_paragraph(
-    "The script that made both changes is saved at server/db/enable-tcp.ps1. On a new "
+    "The script that made both changes is saved at app/server/db/enable-tcp.ps1. On a new "
     "machine you need the same two settings, through SSMS or through that script, before "
     "the backend will connect."
 )
 doc.add_paragraph(
     "The application does not connect as an administrator. The login potholepal owns only "
-    "the PotholePal database, and its password sits in server/.env, which is git-ignored."
+    "the PotholePal database, and its password sits in app/server/.env, which is git-ignored."
 )
 
 # ---------------------------------------------------------------- 4
@@ -221,15 +222,15 @@ doc.add_heading("The server, file by file", level=1)
 table(
     ["Path", "What it does"],
     [
-        ["server/index.js", "The Express app: all 14 endpoints, session tokens, upload handling, static serving of uploads and dist/."],
-        ["server/db/schema.sql", "The four tables and their indexes, written so it can run more than once without errors."],
-        ["server/db/setup.js", "Runs the schema. npm run db:setup."],
-        ["server/db/seed.js", "Creates the five accounts, the seven designed reports with their history, 90 synthetic older reports, and six notifications. npm run db:seed."],
-        ["server/db/reset.js", "Deletes everything, reseeds the identity, clears uploaded photos. Runs seed after itself via npm run db:reset."],
-        ["server/lib/domain.js", "The rules: priority scoring, severity labels, nearest area, distance, time formatting. Shared by the API and the seeder, and it reads the area coordinates from src/lib/data.js so both sides agree."],
-        ["server/db/db.js", "The connection pool, configured from server/.env."],
-        ["server/smoke-test.sh", "26 automated checks against a running server. bash server/smoke-test.sh."],
-        ["server/.env", "DB_SERVER, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT. Git-ignored."],
+        ["app/server/index.js", "The Express app: all 14 endpoints, session tokens, upload handling, static serving of uploads and app/dist/."],
+        ["app/server/db/schema.sql", "The four tables and their indexes, written so it can run more than once without errors."],
+        ["app/server/db/setup.js", "Runs the schema. npm run db:setup."],
+        ["app/server/db/seed.js", "Creates the five accounts, the seven designed reports with their history, 90 synthetic older reports, and six notifications. npm run db:seed."],
+        ["app/server/db/reset.js", "Deletes everything, reseeds the identity, clears uploaded photos. Runs seed after itself via npm run db:reset."],
+        ["app/server/lib/domain.js", "The rules: priority scoring, severity labels, nearest area, distance, time formatting. Shared by the API and the seeder, and it reads the area coordinates from app/src/lib/data.js so both sides agree."],
+        ["app/server/db/db.js", "The connection pool, configured from app/server/.env."],
+        ["app/server/smoke-test.sh", "26 automated checks against a running server. bash app/server/smoke-test.sh."],
+        ["app/server/.env", "DB_SERVER, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT. Git-ignored."],
     ],
     widths=[1.7, 4.9],
 )
@@ -294,7 +295,7 @@ doc.add_heading("What changed in the front end", level=1)
 table(
     ["Screen", "What changed today"],
     [
-        ["src/lib/api.js (new)", "Fetch wrapper: sends the bearer token, turns error envelopes into exceptions, and on a 401 clears the session and returns to the right login screen."],
+        ["app/src/lib/api.js (new)", "Fetch wrapper: sends the bearer token, turns error envelopes into exceptions, and on a 401 clears the session and returns to the right login screen."],
         ["Login (new)", "Resident sign-in with the demo account printed on the screen."],
         ["StaffLogin (new)", "Portal sign-in on the navy background, with its own demo account."],
         ["App.jsx", "Route guards for resident pages and the details page, reports loaded from the API, a refresh every 10 seconds, and submitDraft turned into a real multipart POST."],
@@ -333,13 +334,13 @@ doc.add_paragraph(
 doc.add_heading("Running it", level=1)
 doc.add_heading("Development, two terminals", level=2)
 code([
-    "cd server && npm start        # API on http://localhost:3001",
-    "npm run dev                   # front end on http://localhost:5173, proxies /api",
+    "cd app/server && npm start    # API on http://localhost:3001",
+    "npm run dev                   # front end on http://localhost:5173, proxies /api"
 ])
 doc.add_heading("Demo mode, one terminal, one port (verified today)", level=2)
 code([
-    "npm run build                 # builds dist/",
-    "cd server && npm start        # everything on http://localhost:3001",
+    "npm run build                 # builds app/dist/ (from the project root)",
+    "cd app/server && npm start    # everything on http://localhost:3001",
 ])
 doc.add_paragraph(
     "In demo mode the server hands out the built front end itself, and deep links such as "
@@ -348,9 +349,9 @@ doc.add_paragraph(
 )
 doc.add_heading("Data commands", level=2)
 code([
-    "npm run db:setup     # create the tables, safe to repeat",
-    "npm run db:seed      # load accounts, reports, notifications, safe to repeat",
-    "npm run db:reset     # wipe everything and seed again",
+    "cd app/server && npm run db:setup     # create the tables, safe to repeat",
+    "cd app/server && npm run db:seed      # load accounts, reports, notifications, safe to repeat",
+    "cd app/server && npm run db:reset     # wipe everything and seed again",
 ])
 doc.add_paragraph(
     "Use db:reset between practice runs. It was tested today: after a full reset and seed "
@@ -371,7 +372,7 @@ table(
 )
 doc.add_heading("The smoke test", level=2)
 doc.add_paragraph(
-    "With the server running: bash server/smoke-test.sh. It runs 26 checks and prints "
+    "With the server running: bash app/server/smoke-test.sh. It runs 26 checks and prints "
     "PASS or FAIL for each, exiting 0 only when everything passed. It covers signed-out "
     "401s, both logins, a wrong password, the report list and ownership flags, the "
     "stats and notification counts, a real submission landing on #1025 with score 11 and "
@@ -383,7 +384,7 @@ doc.add_paragraph(
 )
 note(
     "The smoke test submits a real report, so it consumes #1025. Run npm run db:reset "
-    "afterwards and the demo is clean again."
+    "in app/server afterwards and the demo is clean again."
 )
 
 # ---------------------------------------------------------------- run it yourself
@@ -395,13 +396,13 @@ doc.add_paragraph(
 numbered([
     "Open a terminal in the project folder, the one that contains package.json. "
     "Check Node first: node -v should print v24.22.0.",
-    "Start the API: cd server, then npm start. Wait for the line PotholePal API on "
+    "Start the API: cd app/server, then npm start. Wait for the line PotholePal API on "
     "http://localhost:3001 (db: PotholePal). Leave that window open; Ctrl+C stops the app.",
     "Make sure there is a current build: npm run build in the project folder, any time "
     "the code changed.",
     "Open http://localhost:3001 in a browser. In this mode one process serves the app "
     "and the API together, and that is the setup for Thursday.",
-    "For editing with hot reload instead, use two windows: npm start inside server/, and "
+    "For editing with hot reload instead, use two windows: npm start inside app/server/, and "
     "npm run dev in the project folder, then open http://localhost:5173. Vite forwards "
     "/api and /uploads to port 3001.",
     "The first screen is the login, with the demo credentials printed on it. Sign in as "
@@ -411,7 +412,7 @@ numbered([
     "database. Then the map, notifications, profile, and the municipality portal button.",
     "For the two-sided demo, open two browser windows: Chrome signed in as the resident, "
     "Edge signed in as staff@potholepal.test / staff123.",
-    "Between practice runs: cd server, then npm run db:reset. The data starts clean and "
+    "Between practice runs: cd app/server, then npm run db:reset. The data starts clean and "
     "the next submitted report is #1025 again.",
 ])
 doc.add_paragraph("When something does not start:")
@@ -436,7 +437,7 @@ doc.add_paragraph(
 )
 numbered([
     "Put the laptop and the phone on the same Wi-Fi network.",
-    "Start the demo on the laptop: npm run build, then cd server && npm start, and leave "
+    "Start the demo on the laptop: npm run build, then cd app/server && npm start, and leave "
     "it running.",
     "Find the laptop's address: ipconfig, then the IPv4 address under the Wi-Fi adapter. "
     "Today it is 192.168.1.221. It changes when you move to another network.",
@@ -499,8 +500,8 @@ doc.add_heading("The demo on Thursday 29 October", level=1)
 doc.add_heading("Five minutes before", level=2)
 numbered([
     "Start SQL Server if it is not already running (it is set to start automatically).",
-    "npm run db:reset in server/, so the demo starts clean and the first submission is #1025.",
-    "npm run build, then cd server && npm start. Open http://localhost:3001 in Chrome and in Edge.",
+    "npm run db:reset in app/server/, so the demo starts clean and the first submission is #1025.",
+    "npm run build, then cd app/server && npm start. Open http://localhost:3001 in Chrome and in Edge.",
     "Sign in Chrome as alex@potholepal.test / resident123 and Edge as staff@potholepal.test / staff123.",
 ])
 doc.add_heading("The walk-through", level=2)
@@ -562,6 +563,6 @@ note(
     "back to a clean start with the next report numbered 1025."
 )
 
-out = "docs/PotholePal-day2-backend.docx"
+out = "group-docs/PotholePal-day2-backend.docx"
 doc.save(out)
 print("wrote", out)

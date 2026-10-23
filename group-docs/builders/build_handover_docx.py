@@ -1,6 +1,7 @@
-"""Build docs/PotholePal-day1-handover.docx.
+"""Build group-docs/PotholePal-day1-handover.docx.
 
-Re-run after editing the content below:  python docs/build_handover_docx.py
+Re-run after editing the content below (from the project root):
+python group-docs/builders/build_handover_docx.py
 """
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
@@ -172,17 +173,19 @@ doc.add_paragraph(
 table(
     ["Path", "What it does"],
     [
-        ["src/App.jsx", "Holds the report draft and the list of submitted reports, and maps every URL to a screen."],
-        ["src/context/flow.js", "The shared draft object (photo, location, size, damage and so on) plus the shape of a submitted report."],
-        ["src/lib/data.js", "All mock content: the seven seeded reports, statuses, notifications, dashboard figures. This is the file the API replaces."],
-        ["src/lib/icons.jsx", "The inline SVG icon set."],
-        ["src/components/LeafletMap.jsx", "One map component used four times. Handles markers, cluster badges, heatmap blobs, and the draggable pin."],
-        ["src/components/FlowHeader.jsx", "Back arrow, title and progress bars shared by the four flow steps."],
-        ["src/components/navbar.jsx", "The five-tab bottom bar with active states."],
-        ["src/pages/", "Home, Map, Profile, Notifications, MyReports, ReportDetails, Dashboard, and ReportPotholePage1 to 4."],
-        ["public/", "Logo files: the original plus 48, 96, 192 and 512 pixel versions."],
-        ["docs/", "This document and the script that builds it."],
-        ["project-status.html", "The status board from this morning: live previews of every screen plus the feature table."],
+        ["app/src/App.jsx", "Holds the report draft and the list of submitted reports, and maps every URL to a screen."],
+        ["app/src/context/flow.js", "The shared draft object (photo, location, size, damage and so on) plus the shape of a submitted report."],
+        ["app/src/lib/data.js", "All mock content: the seven seeded reports, statuses, notifications, dashboard figures. This is the file the API replaces."],
+        ["app/src/lib/icons.jsx", "The inline SVG icon set."],
+        ["app/src/components/LeafletMap.jsx", "One map component used four times. Handles markers, cluster badges, heatmap blobs, and the draggable pin."],
+        ["app/src/components/FlowHeader.jsx", "Back arrow, title and progress bars shared by the four flow steps."],
+        ["app/src/components/navbar.jsx", "The five-tab bottom bar with active states."],
+        ["app/src/pages/", "Home, Map, Profile, Notifications, MyReports, ReportDetails, Dashboard, and ReportPotholePage1 to 4."],
+        ["app/server/", "The Express API server and its database scripts."],
+        ["app/public/", "Logo files: the original plus 48, 96, 192 and 512 pixel versions."],
+        ["group-docs/", "This document and the other deliverable documents."],
+        ["group-docs/builders/", "The Python scripts that generate the documents."],
+        ["archive/project-status.html", "The status board from this morning: live previews of every screen plus the feature table."],
     ],
     widths=[1.7, 4.6],
 )
@@ -432,12 +435,12 @@ bullets([
 
 # ---------------------------------------------------------------- 8
 doc.add_heading("Running the app", level=1)
-doc.add_paragraph("Dependencies are already installed. From the project folder:")
+doc.add_paragraph("Dependencies are already installed. From the app folder (app/):")
 for line in [
     "npm run dev                  # start on http://127.0.0.1:5173",
     "npm run dev -- --port 5173   # explicit port, use this if 5173 is taken",
     "npm run lint                 # eslint, currently clean",
-    "npm run build                # production build into dist/",
+    "npm run build                # production build into app/dist/",
 ]:
     p = doc.add_paragraph()
     run = p.add_run(line)
@@ -451,6 +454,6 @@ note(
     "command tomorrow morning will fail with npm not found."
 )
 
-out = "docs/PotholePal-day1-handover.docx"
+out = "group-docs/PotholePal-day1-handover.docx"
 doc.save(out)
 print("wrote", out)
