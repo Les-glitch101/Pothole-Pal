@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LeafletMap from "../components/LeafletMap";
 import {
   MenuIcon,
@@ -45,6 +45,12 @@ function TeamDashboard() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [acting, setActing] = useState(false);
+  // Closing a repair needs proof: the crew picks (or shoots) a photo here,
+  // and one call to /reports/:id/complete moves the report to fixed.
+  const [proving, setProving] = useState(false);
+  const [proof, setProof] = useState(null);
+  const [proofError, setProofError] = useState(null);
+  const fileRef = useRef(null);
   const { reports, team, signOut, refresh } = useFlow();
 
   const loadStats = useCallback(() => {
@@ -131,6 +137,14 @@ function TeamDashboard() {
 
   const advance = async () => {
     if (!selected || !NEXT_STEP[selected.status]) return;
+    // The final step is not a plain status change: it needs the repair photo,
+    // so open the capture panel instead of PATCHing straight away.
+    if (NEXT_STEP[selected.status].status === "fixed") {
+      setProving(true);
+      setProof(null);
+      setProofError(null);
+      return;
+    }
     setActing(true);
     try {
       await api(`/reports/${selected.id}`, {
@@ -142,6 +156,38 @@ function TeamDashboard() {
       await loadStats();
     } catch (err) {
       console.error("status change failed:", err);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const pickProof = (e) => {
+    const file = e.target.files?.[0] || null;
+    setProofError(null);
+    setProof(file ? { file, preview: URL.createObjectURL(file) } : null);
+  };
+
+  const cancelProof = () => {
+    if (proof?.preview) URL.revokeObjectURL(proof.preview);
+    setProof(null);
+    setProving(false);
+  };
+
+  const confirmFixed = async () => {
+    if (!selected || !proof) return;
+    setActing(true);
+    setProofError(null);
+    try {
+      const form = new FormData();
+      form.append("photo", proof.file, "repair.jpg");
+      await api(`/reports/${selected.id}/complete`, { method: "POST", form, role: "team" });
+      if (proof.preview) URL.revokeObjectURL(proof.preview);
+      setProof(null);
+      setProving(false);
+      await refresh();
+      await loadStats();
+    } catch (err) {
+      setProofError(err.message);
     } finally {
       setActing(false);
     }
@@ -480,6 +526,61 @@ function TeamDashboard() {
                     <p className="mt-2 text-center text-[11px] text-white/60">
                       Mark your crew On site at this report to move the progress.
                     </p>
+                  )}
+                  {/* Proof of repair: one photo closes the job and the
+                      residents see it on their report. */}
+                  {proving && (
+                    <div className="mt-3 rounded-2xl bg-white p-3 text-ink">
+                      <p className="text-xs font-extrabold uppercase tracking-wide text-muted">Proof of repair</p>
+                      <p className="mt-1 text-xs text-muted">
+                        Take a photo of the finished work. Residents see it on the report.
+                      </p>
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={pickProof}
+                      />
+                      {proof ? (
+                        <div className="mt-2 flex items-center gap-3">
+                          <img
+                            src={proof.preview}
+                            alt="Repair proof"
+                            className="h-16 w-16 shrink-0 rounded-xl border border-line object-cover"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-bold">{proof.file.name}</p>
+                            {proofError && <p className="mt-0.5 text-xs font-semibold text-red-600">{proofError}</p>}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={acting}
+                            onClick={confirmFixed}
+                            className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-60"
+                          >
+                            {acting ? "Closing..." : "Confirm fixed"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={acting}
+                            onClick={cancelProof}
+                            className="shrink-0 rounded-xl border border-line px-3 py-2 text-xs font-bold text-slate-500 hover:border-slate-300 disabled:opacity-60"
+                          >
+                            Retake
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileRef.current?.click()}
+                          className="mt-2 w-full rounded-xl border border-dashed border-slate-300 py-3 text-xs font-bold text-slate-500 hover:border-primary hover:text-primary"
+                        >
+                          Take or choose the repair photo
+                        </button>
+                      )}
+                    </div>
                   )}
                 </>
               ) : (

@@ -34,11 +34,17 @@ CREATE TABLE dbo.reports (
     duplicate_count INT           NOT NULL CONSTRAINT DF_reports_dup DEFAULT (0),
     photo_url       NVARCHAR(400) NULL,
     evidence_url    NVARCHAR(400) NULL,
+    -- Proof-of-repair photo the crew takes when they close the report.
+    fixed_photo_url NVARCHAR(400) NULL,
     created_at      DATETIME2     NOT NULL CONSTRAINT DF_reports_created DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2     NOT NULL CONSTRAINT DF_reports_updated DEFAULT (SYSUTCDATETIME()),
     scheduled_at    DATETIME2     NULL,
     fixed_at        DATETIME2     NULL
 );
+
+-- Databases created before the repair-photo feature get the column here.
+IF COL_LENGTH('dbo.reports', 'fixed_photo_url') IS NULL
+    ALTER TABLE dbo.reports ADD fixed_photo_url NVARCHAR(400) NULL;
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UQ_reports_ref' AND object_id = OBJECT_ID('dbo.reports'))
     CREATE UNIQUE INDEX UQ_reports_ref ON dbo.reports (ref);

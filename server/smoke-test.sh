@@ -47,8 +47,14 @@ check "seed report not owned by Alex" "$MINE" "False"
 # 4. stats + notifications before submitting
 ST=$(curl -s "$BASE/stats" -H "Authorization: Bearer $RTOK")
 check "stats total is 97" "$(echo "$ST" | py "import sys,json;print(json.load(sys.stdin)['total'])" 2>/dev/null)" "97"
-N0=$(curl -s "$BASE/notifications" -H "Authorization: Bearer $RTOK" | py "import sys,json;print(sum(len(g['items']) for g in json.load(sys.stdin)))" 2>/dev/null)
+NOTIF=$(curl -s "$BASE/notifications" -H "Authorization: Bearer $RTOK")
+N0=$(echo "$NOTIF" | py "import sys,json;print(sum(len(g['items']) for g in json.load(sys.stdin)))" 2>/dev/null)
 check "6 seeded notifications" "$N0" "6"
+# Date grouping: Today, Yesterday, then older notices under their date.
+check "notifications group by day (Today/Yesterday/date)" "$(echo "$NOTIF" | py "
+import sys,json,re
+g=[x['group'] for x in json.load(sys.stdin)]
+print(len(g)>=3 and g[0]=='Today' and g[1]=='Yesterday' and bool(re.match(r'^\\d+ \\w+', g[2])))" 2>/dev/null)" "True"
 
 # 5. submit a report (P1 candidate: Large/Deep/High/Yes = score 11)
 POST1=$(curl -s -w '\n%{http_code}' -X POST "$BASE/reports" -H "Authorization: Bearer $RTOK" \
@@ -165,11 +171,16 @@ EV=$(curl -s -X POST "$BASE/reports/1025/evidence" -H "Authorization: Bearer $RT
 check "evidence photo attached" "$(echo "$EV" | py "import sys,json;e=json.load(sys.stdin).get('evidence','');print(e.startswith('/uploads/'))" 2>/dev/null)" "True"
 check "still exactly 98 reports (no second work item)" "$(curl -s "$BASE/reports" -H "Authorization: Bearer $RTOK" | py "import sys,json;print(len(json.load(sys.stdin)))" 2>/dev/null)" "98"
 
-# 12. ranks, badges and the leaderboard. Alex seeds with 1250 points (Road
-# Warrior, level 3); closing report 1025 pays +50.
-FIX=$(curl -s -X PATCH "$BASE/reports/1025" -H "Authorization: Bearer $STOK" \
+# 12. closing a repair needs a photo (proof of work), then pays +50.
+NOPHOTO=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/reports/1025" -H "Authorization: Bearer $STOK" \
   -H 'Content-Type: application/json' -d '{"status":"fixed"}')
-check "staff closes report 1025" "$(echo "$FIX" | py "import sys,json;print(json.load(sys.stdin).get('status',''))" 2>/dev/null)" "fixed"
+check "PATCH straight to fixed is refused (needs a photo)" "$NOPHOTO" "400"
+
+FIX=$(curl -s -X POST "$BASE/reports/1025/complete" -H "Authorization: Bearer $STOK" \
+  -F "photo=@public/logo-96.png;type=image/png")
+check "staff closes report 1025 with a repair photo" "$(echo "$FIX" | py "import sys,json;print(json.load(sys.stdin).get('status',''))" 2>/dev/null)" "fixed"
+check "closed report carries the repair photo" "$(echo "$FIX" | py "import sys,json;p=json.load(sys.stdin).get('fixedPhoto') or '';print(p.startswith('/uploads/'))" 2>/dev/null)" "True"
+check "repair photo visible to the resident" "$(curl -s "$BASE/reports/1025" -H "Authorization: Bearer $RTOK" | py "import sys,json;p=json.load(sys.stdin).get('fixedPhoto') or '';print(p.startswith('/uploads/'))" 2>/dev/null)" "True"
 
 ME3=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $RTOK")
 check "fixed report pays 50 points (1250 to 1300)" "$(echo "$ME3" | py "import sys,json;print(json.load(sys.stdin).get('stats',{}).get('points',0))" 2>/dev/null)" "1300"

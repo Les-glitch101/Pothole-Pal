@@ -139,6 +139,8 @@ function mapReport(row, history, userId) {
     duplicateCount: row.duplicate_count,
     photo: row.photo_url,
     evidence: row.evidence_url,
+    // Proof-of-repair photo the crew attached when closing the report.
+    fixedPhoto: row.fixed_photo_url,
     reportedAt: relativeTime(row.created_at),
     createdAt: new Date(row.created_at).toISOString(),
     reporter: row.reporter_name || null,
@@ -551,6 +553,12 @@ app.patch("/api/v1/reports/:id", requireStaffOrTeam, async (req, res) => {
   if (!STAGE_ORDER.includes(status)) {
     return res.status(400).json({ error: { code: "invalid_status", message: `Status must be one of: ${STAGE_ORDER.join(", ")}.` } });
   }
+  // Closing needs proof: the photo path below is the only way to fixed.
+  if (status === "fixed") {
+    return res.status(400).json({
+      error: { code: "repair_photo_required", message: "Closing a repair needs a photo: send it to /reports/:id/complete." },
+    });
+  }
   const { recordset } = await pool.request().input("id", sql.Int, id)
     .query("SELECT id, ref, reporter_id, status FROM dbo.reports WHERE id = @id");
   const report = recordset[0];
@@ -592,23 +600,79 @@ app.patch("/api/v1/reports/:id", requireStaffOrTeam, async (req, res) => {
       body: notify.body(report),
     });
   }
-  if (status === "fixed" && report.reporter_id) {
-    // +50 points, and the level is recomputed from the new total so a rank-up
-    // lands at the same moment the points do.
-    const { recordset: earned } = await pool.request().input("uid", sql.Int, report.reporter_id)
-      .query("UPDATE dbo.users SET points = points + 50 OUTPUT INSERTED.points WHERE id = @uid");
-    const newPoints = Number(earned[0].points);
-    await pool.request().input("uid", sql.Int, report.reporter_id).input("level", sql.Int, rankOf(newPoints).level)
-      .query("UPDATE dbo.users SET level = @level WHERE id = @uid");
+  if (status === "fixed") await payFixBonus(report);
+
+  res.json(await loadReport(id, req.user.id));
+});
+
+// The +50 points that come with a closed report, and the level recompute so a
+// rank-up lands at the same moment the points do. Shared by the staff PATCH
+// path and the crew's photo-complete endpoint below.
+async function payFixBonus(report) {
+  if (!report.reporter_id) return;
+  const { recordset: earned } = await pool.request().input("uid", sql.Int, report.reporter_id)
+    .query("UPDATE dbo.users SET points = points + 50 OUTPUT INSERTED.points WHERE id = @uid");
+  const newPoints = Number(earned[0].points);
+  await pool.request().input("uid", sql.Int, report.reporter_id).input("level", sql.Int, rankOf(newPoints).level)
+    .query("UPDATE dbo.users SET level = @level WHERE id = @uid");
+  await insertRow(pool.request(), "dbo.notifications", {
+    user_id: report.reporter_id,
+    report_id: report.id,
+    type: "points",
+    title: "You earned 50 points",
+    body: "+50 points for reporting issues in your area.",
+  });
+}
+
+// Closing a repair (FR-12): crews finish the job with one photo that proves
+// the work, and that single call moves the report to fixed and stores the
+// picture for the residents to see. Teams must be standing on the report;
+// staff may close on their behalf.
+app.post("/api/v1/reports/:id/complete", requireStaffOrTeam, upload.single("photo"), async (req, res) => {
+  const id = badId(req, res);
+  if (id === null) return;
+  if (!req.file) {
+    return res.status(400).json({ error: { code: "photo_required", message: "A photo of the finished repair is required." } });
+  }
+  const { recordset } = await pool.request().input("id", sql.Int, id)
+    .query("SELECT id, ref, reporter_id, status FROM dbo.reports WHERE id = @id");
+  const report = recordset[0];
+  if (!report) return res.status(404).json({ error: { code: "not_found", message: `Report #${id} could not be found.` } });
+  if (report.status === "fixed") {
+    return res.status(409).json({ error: { code: "already_fixed", message: `Report ${report.ref} is already marked fixed.` } });
+  }
+
+  if (req.user.role === "team") {
+    const { recordset: mine } = await pool.request().input("uid", sql.Int, req.user.id)
+      .query("SELECT status, report_id FROM dbo.teams WHERE user_id = @uid");
+    const assignment = mine[0];
+    if (!assignment || assignment.status !== "onsite" || Number(assignment.report_id) !== id) {
+      return res.status(403).json({
+        error: { code: "not_on_site", message: "Your crew must be marked on site at this report to close the repair." },
+      });
+    }
+  }
+
+  const photoUrl = "/uploads/" + req.file.filename;
+  await pool.request().input("id", sql.Int, id).input("url", sql.NVarChar(400), photoUrl)
+    .query("UPDATE dbo.reports SET status = 'fixed', fixed_at = SYSUTCDATETIME(), fixed_photo_url = @url, updated_at = SYSUTCDATETIME() WHERE id = @id");
+  await insertRow(pool.request(), "dbo.report_status_history", {
+    report_id: id,
+    status: "fixed",
+    note: `Repair finished — photo attached by ${req.user.name}.`,
+    changed_by: req.user.id,
+  });
+  const notify = STATUS_NOTIFICATIONS.fixed;
+  if (notify && report.reporter_id) {
     await insertRow(pool.request(), "dbo.notifications", {
       user_id: report.reporter_id,
       report_id: id,
-      type: "points",
-      title: "You earned 50 points",
-      body: "+50 points for reporting issues in your area.",
+      type: notify.type,
+      title: notify.title(report),
+      body: notify.body(report),
     });
   }
-
+  await payFixBonus(report);
   res.json(await loadReport(id, req.user.id));
 });
 
@@ -764,10 +828,12 @@ const NOTIFICATION_UI = {
   alert: { icon: "alert", tone: "#ef4444" },
 };
 
+const NOTIF_MONTHS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
 app.get("/api/v1/notifications", requireAuth, async (req, res) => {
   const { recordset } = await pool.request().input("uid", sql.Int, req.user.id)
     .query("SELECT id, report_id, type, title, body, created_at FROM dbo.notifications WHERE user_id = @uid ORDER BY created_at DESC");
-  const cutoff = Date.now() - 24 * 3600 * 1000;
   const toItem = (n) => ({
     id: n.id,
     ...(NOTIFICATION_UI[n.type] || NOTIFICATION_UI.verified),
@@ -775,12 +841,22 @@ app.get("/api/v1/notifications", requireAuth, async (req, res) => {
     body: n.body,
     reportId: n.report_id,
   });
-  const today = recordset.filter((n) => new Date(n.created_at).getTime() >= cutoff).map(toItem);
-  const earlier = recordset.filter((n) => new Date(n.created_at).getTime() < cutoff).map(toItem);
-  const groups = [];
-  if (today.length) groups.push({ group: "Today", items: today });
-  if (earlier.length) groups.push({ group: "Earlier", items: earlier });
-  res.json(groups);
+  // Grouped by calendar day, not a rolling 24 h window: Today, Yesterday,
+  // then the date itself (with the year only when it is not this year).
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const labelOf = (d) =>
+    `${d.getDate()} ${NOTIF_MONTHS[d.getMonth()]}${d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : ""}`;
+  const groups = new Map();
+  for (const n of recordset) {
+    const when = new Date(n.created_at);
+    const label = when >= todayStart ? "Today" : when >= yesterdayStart ? "Yesterday" : labelOf(when);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(toItem(n));
+  }
+  res.json([...groups].map(([group, items]) => ({ group, items })));
 });
 
 app.post("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {

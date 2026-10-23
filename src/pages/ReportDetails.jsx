@@ -97,6 +97,20 @@ function ReportDetails() {
         />
       </div>
 
+      {/* Proof of repair: the photo the crew took when they closed the job. */}
+      {report.status === "fixed" && report.fixedPhoto && (
+        <div className="mt-3 px-4">
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-emerald-600">
+            <CheckIcon className="h-3.5 w-3.5" strokeWidth={3.5} /> Fixed — repair photo
+          </p>
+          <img
+            src={report.fixedPhoto}
+            alt="Repair after photo"
+            className="h-44 w-full rounded-3xl border border-emerald-200 object-cover shadow-sm"
+          />
+        </div>
+      )}
+
       {/* Area + following */}
       <div className="mt-4 flex items-start gap-3 px-4">
         <div className="min-w-0 flex-1">

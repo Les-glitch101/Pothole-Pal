@@ -40,8 +40,26 @@ const CREATED_HOURS_AGO = { 1018: 96, 1019: 48, 1020: 30, 1021: 6, 1022: 5, 1023
 
 // The six notifications from src/lib/data.js, flattened in order.
 const NOTIF_TYPE_BY_ICON = { check: "verified", wrench: "scheduled", award: "points", message: "comment", alert: "alert" };
-const NOTIF_HOURS_AGO = [2, 4, 6, 11, 40, 44];
 const NOTIF_REPORT_ID = [1024, 1024, 1019, null, 1019, null];
+
+// Timestamps are anchored to calendar days so the resident screen always
+// demonstrates all three date groups: two from today, two from yesterday,
+// and two older ones that show their date.
+function notifTimes(now = new Date()) {
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayAt = (daysBack, h, m) => {
+    const d = new Date(todayStart);
+    d.setDate(d.getDate() - daysBack);
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+  // Anything that would land before midnight is clamped back onto today.
+  const withinToday = (hoursAgo) => {
+    const d = new Date(now.getTime() - hoursAgo * 3600 * 1000);
+    return d >= todayStart ? d : new Date(todayStart.getTime() + 5 * 60000);
+  };
+  return [withinToday(2), withinToday(5), dayAt(1, 18, 10), dayAt(1, 9, 30), dayAt(3, 14, 5), dayAt(6, 11, 45)];
+}
 
 const SYN_COUNT = 90;
 // Spread the synthetic reports over six months so the staff Analytics tab
@@ -146,6 +164,22 @@ fs.writeFileSync(
   decodeURIComponent(POTHOLE_IMG.slice(POTHOLE_IMG.indexOf(",") + 1)),
 );
 
+// Proof-of-repair placeholder: a fresh tar patch with a green tick, so the
+// seeded fixed reports show the after-photo the way a real crew would send it.
+const REPAIR_PHOTO_URL = "/uploads/seed-repaired.svg";
+fs.writeFileSync(
+  path.join(uploadsDir, "seed-repaired.svg"),
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#9ca3af"/>
+  <rect y="20" width="400" height="14" fill="#e5e7eb"/>
+  <rect y="266" width="400" height="14" fill="#e5e7eb"/>
+  <rect x="40" y="90" width="320" height="120" rx="18" fill="#374151"/>
+  <rect x="40" y="90" width="320" height="120" rx="18" fill="none" stroke="#1f2937" stroke-width="6"/>
+  <circle cx="330" cy="60" r="30" fill="#16a34a"/>
+  <path d="M317 60 l9 9 l17 -19" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+);
+
 // ---------------------------------------------------------------- designed reports
 // Identity starts at 1018, so these land on 1018-1024 in id order and the
 // first report submitted in the app gets #1025.
@@ -174,6 +208,8 @@ if (designedCount.recordset[0].n === 0) {
       priority,
       score,
       photo_url: "/uploads/seed-pothole.svg",
+      // Closed reports carry the crew's after-photo, like a real close-out.
+      fixed_photo_url: r.status === "fixed" ? REPAIR_PHOTO_URL : null,
       created_at: createdAt,
       updated_at: createdAt,
     }, { output: "INSERTED.id" });
@@ -199,7 +235,7 @@ if (syntheticCount.recordset[0].n !== SYN_COUNT) {
 
   const synthetic = [];
   const stmts = ["SET IDENTITY_INSERT dbo.reports ON"];
-  const COLS = "id, reporter_id, lat, lng, address, area, issue_type, size, depth, traffic, damage, description, status, priority, score, photo_url, created_at, updated_at";
+  const COLS = "id, reporter_id, lat, lng, address, area, issue_type, size, depth, traffic, damage, description, status, priority, score, photo_url, fixed_photo_url, created_at, updated_at";
 
   for (let n = 1; n <= SYN_COUNT; n++) {
     const area = pick(AREAS);
@@ -225,6 +261,7 @@ if (syntheticCount.recordset[0].n !== SYN_COUNT) {
       [n, reporterId, lat.toFixed(6), lng.toFixed(6), q(`${area.area}, Emphuleni District, Gauteng`), q(area.area),
         q(pick(SYN_ISSUE)), q(fields.size), q(fields.depth), q(fields.traffic), q(fields.damage),
         q(pick(SYN_DESC)), q(status), q(priority), score, q("/uploads/seed-pothole.svg"),
+        status === "fixed" ? q(REPAIR_PHOTO_URL) : "NULL",
         iso(createdAt), iso(createdAt)].join(", ") + ")",
     );
     synthetic.push({ id: n, status, createdAt, reporterId });
@@ -244,6 +281,7 @@ if (syntheticCount.recordset[0].n !== SYN_COUNT) {
 const notifCount = await pool.request().input("uid", sql.Int, alexId).query("SELECT COUNT(*) AS n FROM dbo.notifications WHERE user_id = @uid");
 let notifsSeeded = 0;
 if (notifCount.recordset[0].n === 0) {
+  const times = notifTimes();
   let i = 0;
   for (const group of NOTIFICATIONS) {
     for (const item of group.items) {
@@ -253,7 +291,7 @@ if (notifCount.recordset[0].n === 0) {
         type: NOTIF_TYPE_BY_ICON[item.icon] || "verified",
         title: item.title,
         body: item.body,
-        created_at: new Date(Date.now() - NOTIF_HOURS_AGO[i] * 3600 * 1000),
+        created_at: times[i],
       });
       i++;
       notifsSeeded++;
